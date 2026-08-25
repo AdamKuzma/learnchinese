@@ -1,0 +1,6 @@
+build/
+LearnChinese/Secrets.plist
+xcuserdata/
+*.xcuserstate
+.DS_Store
+

@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		D10B0000000000000000CB0B /* DeviceActivityMonitorExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D1020000000000000000CB02 /* DeviceActivityMonitorExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		D1110000000000000000CB11 /* ShieldMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1100000000000000000CB10 /* ShieldMonitor.swift */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		C8D6C4422FE86430000CB534 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -21,12 +26,37 @@
 			remoteGlobalIDString = C8D6C4332FE8642F000CB534;
 			remoteInfo = LearnChinese;
 		};
+		D10D0000000000000000CB0D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C8D6C42C2FE8642E000CB534 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D1010000000000000000CB01;
+			remoteInfo = DeviceActivityMonitorExtension;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		D10A0000000000000000CB0A /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				D10B0000000000000000CB0B /* DeviceActivityMonitorExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		C8D6C4342FE8642F000CB534 /* LearnChinese.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LearnChinese.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C8D6C4412FE86430000CB534 /* LearnChineseTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LearnChineseTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C8D6C44B2FE86430000CB534 /* LearnChineseUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LearnChineseUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		D1020000000000000000CB02 /* DeviceActivityMonitorExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DeviceActivityMonitorExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		D1100000000000000000CB10 /* ShieldMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShieldMonitor.swift; sourceTree = "<group>"; };
+		D1120000000000000000CB12 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		D1130000000000000000CB13 /* DeviceActivityMonitorExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DeviceActivityMonitorExtension.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -69,6 +99,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D1050000000000000000CB05 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -78,6 +115,7 @@
 				C8D6C4362FE8642F000CB534 /* LearnChinese */,
 				C8D6C4442FE86430000CB534 /* LearnChineseTests */,
 				C8D6C44E2FE86430000CB534 /* LearnChineseUITests */,
+				D1140000000000000000CB14 /* DeviceActivityMonitorExtension */,
 				C8D6C4352FE8642F000CB534 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -88,8 +126,19 @@
 				C8D6C4342FE8642F000CB534 /* LearnChinese.app */,
 				C8D6C4412FE86430000CB534 /* LearnChineseTests.xctest */,
 				C8D6C44B2FE86430000CB534 /* LearnChineseUITests.xctest */,
+				D1020000000000000000CB02 /* DeviceActivityMonitorExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		D1140000000000000000CB14 /* DeviceActivityMonitorExtension */ = {
+			isa = PBXGroup;
+			children = (
+				D1100000000000000000CB10 /* ShieldMonitor.swift */,
+				D1120000000000000000CB12 /* Info.plist */,
+				D1130000000000000000CB13 /* DeviceActivityMonitorExtension.entitlements */,
+			);
+			path = DeviceActivityMonitorExtension;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -102,10 +151,12 @@
 				C8D6C4302FE8642F000CB534 /* Sources */,
 				C8D6C4312FE8642F000CB534 /* Frameworks */,
 				C8D6C4322FE8642F000CB534 /* Resources */,
+				D10A0000000000000000CB0A /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				D10C0000000000000000CB0C /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				C8D6C4362FE8642F000CB534 /* LearnChinese */,
@@ -163,6 +214,25 @@
 			productReference = C8D6C44B2FE86430000CB534 /* LearnChineseUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		D1010000000000000000CB01 /* DeviceActivityMonitorExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D1090000000000000000CB09 /* Build configuration list for PBXNativeTarget "DeviceActivityMonitorExtension" */;
+			buildPhases = (
+				D1040000000000000000CB04 /* Sources */,
+				D1050000000000000000CB05 /* Frameworks */,
+				D1060000000000000000CB06 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = DeviceActivityMonitorExtension;
+			packageProductDependencies = (
+			);
+			productName = DeviceActivityMonitorExtension;
+			productReference = D1020000000000000000CB02 /* DeviceActivityMonitorExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -184,6 +254,9 @@
 						CreatedOnToolsVersion = 26.3;
 						TestTargetID = C8D6C4332FE8642F000CB534;
 					};
+					D1010000000000000000CB01 = {
+						CreatedOnToolsVersion = 26.3;
+					};
 				};
 			};
 			buildConfigurationList = C8D6C42F2FE8642E000CB534 /* Build configuration list for PBXProject "LearnChinese" */;
@@ -203,6 +276,7 @@
 				C8D6C4332FE8642F000CB534 /* LearnChinese */,
 				C8D6C4402FE86430000CB534 /* LearnChineseTests */,
 				C8D6C44A2FE86430000CB534 /* LearnChineseUITests */,
+				D1010000000000000000CB01 /* DeviceActivityMonitorExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -223,6 +297,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		C8D6C4492FE86430000CB534 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D1060000000000000000CB06 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -253,6 +334,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D1040000000000000000CB04 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D1110000000000000000CB11 /* ShieldMonitor.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -265,6 +354,11 @@
 			isa = PBXTargetDependency;
 			target = C8D6C4332FE8642F000CB534 /* LearnChinese */;
 			targetProxy = C8D6C44C2FE86430000CB534 /* PBXContainerItemProxy */;
+		};
+		D10C0000000000000000CB0C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D1010000000000000000CB01 /* DeviceActivityMonitorExtension */;
+			targetProxy = D10D0000000000000000CB0D /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -395,11 +489,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = LearnChinese/LearnChinese.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = LK8M3QQF58;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_OPENAI_API_KEY = "$(OPENAI_API_KEY)";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -427,11 +523,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = LearnChinese/LearnChinese.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = LK8M3QQF58;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_OPENAI_API_KEY = "$(OPENAI_API_KEY)";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -538,6 +636,56 @@
 			};
 			name = Release;
 		};
+		D1070000000000000000CB07 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = DeviceActivityMonitorExtension/DeviceActivityMonitorExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = LK8M3QQF58;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = DeviceActivityMonitorExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = adamkuzma.LearnChinese.DeviceActivityMonitorExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		D1080000000000000000CB08 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = DeviceActivityMonitorExtension/DeviceActivityMonitorExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = LK8M3QQF58;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = DeviceActivityMonitorExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = adamkuzma.LearnChinese.DeviceActivityMonitorExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -573,6 +721,15 @@
 			buildConfigurations = (
 				C8D6C45C2FE86430000CB534 /* Debug */,
 				C8D6C45D2FE86430000CB534 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D1090000000000000000CB09 /* Build configuration list for PBXNativeTarget "DeviceActivityMonitorExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D1070000000000000000CB07 /* Debug */,
+				D1080000000000000000CB08 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
