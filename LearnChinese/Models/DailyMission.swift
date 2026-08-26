@@ -30,6 +30,16 @@ struct HSKRange: Equatable, Sendable {
         let clamped = newMax.clamped(to: Self.levels)
         return HSKRange(min: Swift.min(min, clamped), max: clamped)
     }
+
+    func contains(_ level: Int) -> Bool {
+        (min...max).contains(level)
+    }
+}
+
+struct DailyMissionTargetWord: Sendable {
+    let hanzi: String
+    let pinyin: String
+    let meaning: String
 }
 
 struct DailyMission: Sendable, Decodable {

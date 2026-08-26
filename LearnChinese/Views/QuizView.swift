@@ -4,12 +4,14 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct QuizView: View {
     let cards: [Flashcard]
 
     @EnvironmentObject private var blocker: AppBlocker
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
 
     @State private var question: Question?
     @State private var correctCount = 0
@@ -138,6 +140,7 @@ struct QuizView: View {
 
         if option == question.answer {
             correctCount += 1
+            ProgressService.recordLessonConfirmation(hanzi: question.promptCard.hanzi, in: modelContext)
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {

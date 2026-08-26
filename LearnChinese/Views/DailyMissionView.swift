@@ -31,6 +31,7 @@ struct DailyMissionView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Query private var cards: [Flashcard]
+    @Query private var progressRecords: [ItemProgress]
     @EnvironmentObject private var blocker: AppBlocker
     private let service = OpenAIFlashcardDetailsService.shared
 
@@ -277,7 +278,25 @@ struct DailyMissionView: View {
         phase = .generating
 
         do {
-            let generated = try await service.generateMission(range: SharedStore.hskRange)
+            let range = blocker.hskRange
+            let targets = ProgressService.learningDeckTargets(
+                cards: cards,
+                progress: progressRecords,
+                range: range
+            )
+            let generated: DailyMission
+            if let card = targets.randomElement() {
+                generated = try await service.generateMission(
+                    range: range,
+                    targetWord: DailyMissionTargetWord(
+                        hanzi: card.hanzi,
+                        pinyin: card.pinyin,
+                        meaning: card.english
+                    )
+                )
+            } else {
+                generated = try await service.generateMission(range: range)
+            }
             mission = generated
             phase = .playing
         } catch {
@@ -299,6 +318,7 @@ struct DailyMissionView: View {
             let result = try await service.evaluate(mission: mission, userChinese: reply)
             if result.success {
                 energyGranted = blocker.addEnergy(minutes: Energy.dailyMissionReward)
+                ProgressService.recordMissionCompletion(hanzi: mission.hanzi, in: modelContext)
             }
             evaluation = result
             phase = .result

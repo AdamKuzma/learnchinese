@@ -19,5 +19,5 @@ struct ContentView: View {
 #Preview {
     ContentView()
         .environmentObject(AppBlocker())
-        .modelContainer(for: Flashcard.self, inMemory: true)
+        .modelContainer(for: [Flashcard.self, ItemProgress.self], inMemory: true)
 }

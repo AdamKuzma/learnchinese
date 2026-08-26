@@ -96,14 +96,26 @@ actor OpenAIFlashcardDetailsService {
         )
     }
 
-    func generateMission(range: HSKRange) async throws -> DailyMission {
+    func generateMission(range: HSKRange, targetWord: DailyMissionTargetWord? = nil) async throws -> DailyMission {
         let domain = Self.missionDomains.randomElement() ?? "everyday life"
+        let wordInstruction: String
+        if let targetWord {
+            wordInstruction = """
+            Use this exact target word; do not pick a different word:
+            hanzi: \(targetWord.hanzi)
+            pinyin: \(targetWord.pinyin.isEmpty ? "unknown" : targetWord.pinyin)
+            meaning: \(targetWord.meaning)
+            """
+        } else {
+            wordInstruction = "Pick one everyday simplified-Chinese word from HSK \(range.min)–\(range.max) (HSK 3.0). Do not always pick the most common word in the range."
+        }
+
         let prompt = """
         Create one short Daily Mission for a Mandarin learner.
-        Vocabulary range: HSK \(range.min)–\(range.max)
+        Vocabulary range: HSK 3.0 levels \(range.min)–\(range.max)
         Situation domain: \(domain)
 
-        Pick one everyday simplified-Chinese word from that HSK range. Do not always pick the most common word in the range.
+        \(wordInstruction)
         Then write a short, realistic situation where the learner would naturally use that word, and a one-line writing task.
         Provide the situation and task in both simplified Chinese and English.
 

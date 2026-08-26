@@ -6,7 +6,8 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @State private var hskRange = SharedStore.hskRange
+    @EnvironmentObject private var blocker: AppBlocker
+    @State private var hskRange = HSKRange.default
 
     var body: some View {
         List {
@@ -18,7 +19,7 @@ struct SettingsView: View {
                 }
             }
 
-            Section("Daily Mission") {
+            Section {
                 Picker("From", selection: hskMinBinding) {
                     ForEach(Array(HSKRange.levels), id: \.self) { level in
                         Text("HSK \(level)").tag(level)
@@ -32,11 +33,15 @@ struct SettingsView: View {
                     }
                 }
                 .pickerStyle(.menu)
+            } header: {
+                Text("Daily Mission")
+            } footer: {
+                Text("HSK 3.0 vocabulary and grammar, levels 1–6.")
             }
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { hskRange = SharedStore.hskRange }
+        .onAppear { hskRange = blocker.hskRange }
     }
 
     private var hskMinBinding: Binding<Int> {
@@ -44,7 +49,7 @@ struct SettingsView: View {
             get: { hskRange.min },
             set: { newMin in
                 hskRange = hskRange.updatingMin(newMin)
-                SharedStore.hskRange = hskRange
+                blocker.updateHSKRange(hskRange)
             }
         )
     }
@@ -54,7 +59,7 @@ struct SettingsView: View {
             get: { hskRange.max },
             set: { newMax in
                 hskRange = hskRange.updatingMax(newMax)
-                SharedStore.hskRange = hskRange
+                blocker.updateHSKRange(hskRange)
             }
         )
     }

@@ -10,6 +10,7 @@ import UIKit
 struct ManageCardsView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Flashcard.createdAt, order: .reverse) private var cards: [Flashcard]
+    @Query private var progressRecords: [ItemProgress]
 
     @State private var showAdd = false
 
@@ -24,13 +25,22 @@ struct ManageCardsView: View {
             } else {
                 ForEach(cards) { card in
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(card.hanzi)
-                            .font(.title3)
+                        HStack {
+                            Text(card.hanzi)
+                                .font(.title3)
+                            Spacer()
+                            Text(badge(for: card))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                         Text(card.pinyin)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                         Text(card.english)
                             .font(.subheadline)
+                        Text(ProgressService.status(for: card.hanzi, cards: cards, progress: progressRecords).title)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 .onDelete(perform: delete)
@@ -57,6 +67,16 @@ struct ManageCardsView: View {
         for index in offsets {
             context.delete(cards[index])
         }
+    }
+
+    private func badge(for card: Flashcard) -> String {
+        if let level = HSKCatalog.bundled.vocab(for: card.hanzi)?.level {
+            return "HSK \(level)"
+        }
+        if !HSKCatalog.bundled.grammarPoints(for: card.hanzi).isEmpty {
+            return "Grammar"
+        }
+        return "Custom"
     }
 }
 

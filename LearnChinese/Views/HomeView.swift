@@ -10,12 +10,15 @@ import Combine
 struct HomeView: View {
     @EnvironmentObject private var blocker: AppBlocker
     @Query private var cards: [Flashcard]
+    @Query private var progressRecords: [ItemProgress]
 
     @State private var showQuiz = false
 
     var body: some View {
         List {
             statusSection
+
+            progressSection
 
             Section {
                 NavigationLink {
@@ -110,6 +113,44 @@ struct HomeView: View {
             return "Add at least 4 flashcards to start a quiz."
         }
         return ""
+    }
+
+    @ViewBuilder
+    private var progressSection: some View {
+        let snapshot = ProgressService.snapshot(cards: cards, progress: progressRecords)
+        let summary = snapshot.summary(in: blocker.hskRange)
+        Section("HSK progress") {
+            NavigationLink {
+                HSKProgressView()
+            } label: {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(blocker.hskRange.title)
+                        .font(.headline)
+                    labeledBar(title: "Vocabulary", added: summary.vocabAdded, total: summary.vocabTotal)
+                    labeledBar(title: "Grammar", added: summary.grammarAdded, total: summary.grammarTotal)
+                    if snapshot.custom.added > 0 {
+                        Text("Custom \(snapshot.custom.added)")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+        }
+    }
+
+    private func labeledBar(title: String, added: Int, total: Int) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(title)
+                Spacer()
+                Text("\(added)/\(total)")
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+            .font(.subheadline)
+            ProgressView(value: total == 0 ? 0 : Double(added), total: Double(max(total, 1)))
+        }
     }
 
     @ViewBuilder

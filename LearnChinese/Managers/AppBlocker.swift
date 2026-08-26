@@ -19,6 +19,7 @@ final class AppBlocker: ObservableObject {
     @Published var unlockUntil: Date?
     @Published var sessionMode: SessionMode
     @Published var questionTypeMode: QuestionTypeMode
+    @Published var hskRange: HSKRange
 
     private let store = ManagedSettingsStore(named: .init(SharedStore.managedSettingsStoreName))
     private let center = DeviceActivityCenter()
@@ -30,6 +31,7 @@ final class AppBlocker: ObservableObject {
         self.unlockUntil = SharedStore.unlockUntil
         self.sessionMode = SharedStore.sessionMode
         self.questionTypeMode = SharedStore.questionTypeMode
+        self.hskRange = SharedStore.hskRange
         self.isAuthorized = AuthorizationCenter.shared.authorizationStatus == .approved
     }
 
@@ -84,6 +86,11 @@ final class AppBlocker: ObservableObject {
     func updateQuestionTypeMode(_ newMode: QuestionTypeMode) {
         questionTypeMode = newMode
         SharedStore.questionTypeMode = newMode
+    }
+
+    func updateHSKRange(_ newRange: HSKRange) {
+        hskRange = newRange
+        SharedStore.hskRange = newRange
     }
 
     /// Re-applies (or clears) the shield based on the current persisted state.
