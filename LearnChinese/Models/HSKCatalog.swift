@@ -5,6 +5,18 @@
 
 import Foundation
 
+enum HSKSyllabus {
+    /// Official HSK 3.0 (2026) cumulative vocabulary sizes.
+    static let cumulativeVocabulary: [Int: Int] = [
+        1: 300,
+        2: 500,
+        3: 1_000,
+        4: 2_000,
+        5: 3_600,
+        6: 5_400
+    ]
+}
+
 struct HSKVocabWord: Codable, Equatable, Sendable, Hashable, Identifiable {
     var id: String { hanzi }
     let hanzi: String
@@ -24,17 +36,27 @@ struct HSKCatalog: Sendable {
         HSKCatalog.load(from: HSKResource.bundle) ?? HSKCatalog(vocab: [], grammar: [])
     }()
 
+    static func warm() {
+        _ = bundled
+    }
+
     let vocab: [HSKVocabWord]
     let grammar: [HSKGrammarPoint]
+    let publishedCumulativeTotals: [Int: Int]
 
     private let vocabByHanzi: [String: HSKVocabWord]
     private let grammarByToken: [String: [HSKGrammarPoint]]
     private let vocabByLevel: [Int: [HSKVocabWord]]
     private let grammarByLevel: [Int: [HSKGrammarPoint]]
 
-    init(vocab: [HSKVocabWord], grammar: [HSKGrammarPoint]) {
+    init(
+        vocab: [HSKVocabWord],
+        grammar: [HSKGrammarPoint],
+        publishedCumulativeTotals: [Int: Int] = [:]
+    ) {
         self.vocab = vocab
         self.grammar = grammar
+        self.publishedCumulativeTotals = publishedCumulativeTotals
 
         var vocabIndex: [String: HSKVocabWord] = [:]
         var vocabLevels: [Int: [HSKVocabWord]] = [:]
@@ -88,7 +110,11 @@ struct HSKCatalog: Sendable {
         else {
             return nil
         }
-        return HSKCatalog(vocab: vocab, grammar: grammar)
+        return HSKCatalog(
+            vocab: vocab,
+            grammar: grammar,
+            publishedCumulativeTotals: HSKSyllabus.cumulativeVocabulary
+        )
     }
 
     func vocab(for hanzi: String) -> HSKVocabWord? {

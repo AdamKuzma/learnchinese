@@ -197,30 +197,46 @@ final class AppBlocker: ObservableObject {
 
         let calendar = Calendar.current
         let now = Date()
-        // DeviceActivity intervals must be at least 15 minutes. Pad the schedule
-        // if needed; the extension still re-blocks at the real unlockUntil.
-        let scheduledDuration = max(unlockDuration, 15 * 60)
-        let start = now.addingTimeInterval(-60)
-        let end = now.addingTimeInterval(scheduledDuration)
+        let unlockEnd = now.addingTimeInterval(max(unlockDuration, 1))
+        let minimumInterval: TimeInterval = 15 * 60
 
-        var warningTime: DateComponents?
-        if unlockDuration + 30 < scheduledDuration {
-            let minutesBeforeEnd = max(1, Int(((scheduledDuration - unlockDuration) / 60).rounded(.down)))
-            warningTime = DateComponents(minute: minutesBeforeEnd)
+        // Keep the 15-minute minimum by starting in the past, so intervalDidEnd
+        // lands at the real unlock time instead of 15 minutes later.
+        var startDate = now.addingTimeInterval(-60)
+        if unlockEnd.timeIntervalSince(startDate) < minimumInterval {
+            startDate = unlockEnd.addingTimeInterval(-minimumInterval)
         }
 
         let schedule = DeviceActivitySchedule(
-            intervalStart: calendar.dateComponents([.hour, .minute], from: start),
-            intervalEnd: calendar.dateComponents([.hour, .minute], from: end),
+            intervalStart: calendar.dateComponents([.hour, .minute], from: startDate),
+            intervalEnd: calendar.dateComponents([.hour, .minute], from: unlockEnd),
             repeats: false,
-            warningTime: warningTime
+            warningTime: DateComponents(minute: 1)
+        )
+
+        let eventName = DeviceActivityEvent.Name(SharedStore.unlockThresholdEventName)
+        let thresholdMinutes = max(1, Int((unlockDuration / 60).rounded(.up)))
+        let event = DeviceActivityEvent(
+            applications: selection.applicationTokens,
+            categories: selection.categoryTokens,
+            threshold: DateComponents(minute: thresholdMinutes),
+            includesPastActivity: false
         )
 
         do {
-            try center.startMonitoring(unlockActivity, during: schedule)
+            try center.startMonitoring(unlockActivity, during: schedule, events: [eventName: event])
         } catch {
-            // Daily monitoring still re-applies the shield at midnight, and
-            // refreshShieldState() re-applies if the user opens the app.
+            let fallbackEvent = DeviceActivityEvent(
+                applications: selection.applicationTokens,
+                categories: selection.categoryTokens,
+                threshold: DateComponents(minute: 15),
+                includesPastActivity: false
+            )
+            do {
+                try center.startMonitoring(unlockActivity, during: schedule, events: [eventName: fallbackEvent])
+            } catch {
+                try? center.startMonitoring(unlockActivity, during: schedule)
+            }
         }
     }
 

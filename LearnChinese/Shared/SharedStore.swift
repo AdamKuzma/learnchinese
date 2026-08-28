@@ -75,6 +75,7 @@ enum SharedStore {
     static let managedSettingsStoreName = "LearnChineseShield"
     static let deviceActivityName = "LearnChineseUnlock"
     static let dailyDeviceActivityName = "LearnChineseDaily"
+    static let unlockThresholdEventName = "LearnChineseUnlockThreshold"
 
     private enum Key {
         static let selection = "blockedSelection"
@@ -84,7 +85,11 @@ enum SharedStore {
         static let questionTypeMode = "questionTypeMode"
         static let hskRangeMin = "hskRangeMin"
         static let hskRangeMax = "hskRangeMax"
+        static let hskLevel = "hskLevel"
+        static let missionDifficulty = "missionDifficulty"
+        static let missionThemes = "missionThemes"
         static let energyDayStart = "energyDayStart"
+        static let activityEvents = "activityEvents"
     }
 
     private static var defaults: UserDefaults? {
@@ -163,21 +168,72 @@ enum SharedStore {
 
     // MARK: - Daily Mission HSK range
 
+    // MARK: - Daily Mission HSK level
+
+    static var hskLevel: Int {
+        get {
+            if defaults?.object(forKey: Key.hskLevel) != nil {
+                return clampedLevel(defaults?.integer(forKey: Key.hskLevel) ?? HSKRange.defaultLevel)
+            }
+            return hskRange.max
+        }
+        set {
+            let level = clampedLevel(newValue)
+            defaults?.set(level, forKey: Key.hskLevel)
+            hskRange = HSKRange(min: level, max: level)
+        }
+    }
+
     static var hskRange: HSKRange {
         get {
             let hasMin = defaults?.object(forKey: Key.hskRangeMin) != nil
             let hasMax = defaults?.object(forKey: Key.hskRangeMax) != nil
             guard hasMin || hasMax else {
-                return .default
+                return HSKRange(min: HSKRange.defaultLevel, max: HSKRange.defaultLevel)
             }
             return HSKRange(
-                min: hasMin ? (defaults?.integer(forKey: Key.hskRangeMin) ?? HSKRange.default.min) : HSKRange.default.min,
-                max: hasMax ? (defaults?.integer(forKey: Key.hskRangeMax) ?? HSKRange.default.max) : HSKRange.default.max
+                min: hasMin ? (defaults?.integer(forKey: Key.hskRangeMin) ?? HSKRange.defaultLevel) : HSKRange.defaultLevel,
+                max: hasMax ? (defaults?.integer(forKey: Key.hskRangeMax) ?? HSKRange.defaultLevel) : HSKRange.defaultLevel
             )
         }
         set {
             defaults?.set(newValue.min, forKey: Key.hskRangeMin)
             defaults?.set(newValue.max, forKey: Key.hskRangeMax)
+        }
+    }
+
+    private static func clampedLevel(_ level: Int) -> Int {
+        min(max(level, HSKRange.levels.lowerBound), HSKRange.levels.upperBound)
+    }
+
+    // MARK: - Daily Mission difficulty and themes
+
+    static var missionDifficulty: MissionDifficulty {
+        get {
+            guard let raw = defaults?.string(forKey: Key.missionDifficulty),
+                  let difficulty = MissionDifficulty(rawValue: raw)
+            else {
+                return .medium
+            }
+            return difficulty
+        }
+        set {
+            defaults?.set(newValue.rawValue, forKey: Key.missionDifficulty)
+        }
+    }
+
+    static var missionThemes: Set<MissionTheme> {
+        get {
+            let raw = defaults?.stringArray(forKey: Key.missionThemes) ?? []
+            let themes = Set(raw.compactMap(MissionTheme.init(rawValue:)))
+            return themes.isEmpty ? Set(MissionTheme.allCases) : themes
+        }
+        set {
+            let themes = newValue.isEmpty ? Set(MissionTheme.allCases) : newValue
+            defaults?.set(
+                MissionTheme.allCases.filter(themes.contains).map(\.rawValue),
+                forKey: Key.missionThemes
+            )
         }
     }
 
@@ -196,5 +252,50 @@ enum SharedStore {
                 defaults?.removeObject(forKey: Key.energyDayStart)
             }
         }
+    }
+
+    // MARK: - Activity history
+
+    static var activityEvents: [ActivityEvent] {
+        get {
+            guard let data = defaults?.data(forKey: Key.activityEvents),
+                  let events = try? JSONDecoder().decode([ActivityEvent].self, from: data)
+            else {
+                return []
+            }
+            return events
+        }
+        set {
+            defaults?.set(try? JSONEncoder().encode(newValue), forKey: Key.activityEvents)
+        }
+    }
+
+    static func recordActivity(_ kind: ActivityKind) {
+        var events = activityEvents
+        events.append(ActivityEvent(date: .now, kind: kind))
+        activityEvents = events
+    }
+
+    // MARK: - Profile photo
+
+    static var profilePhotoData: Data? {
+        get {
+            guard let url = profilePhotoURL else { return nil }
+            return try? Data(contentsOf: url)
+        }
+        set {
+            guard let url = profilePhotoURL else { return }
+            if let newValue {
+                try? newValue.write(to: url, options: .atomic)
+            } else {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+    }
+
+    private static var profilePhotoURL: URL? {
+        FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: appGroup)?
+            .appendingPathComponent("profilePhoto.jpg")
     }
 }

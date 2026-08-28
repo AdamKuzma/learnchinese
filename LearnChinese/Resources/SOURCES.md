@@ -1,6 +1,10 @@
 # HSK catalog sources
 
 Bundled files cover **HSK 3.0 levels 1–6 only** (levels 7–9 are omitted).
+Progress on Profile is **cumulative**: HSK 4 includes every word from levels 1–4.
+
+Official HSK 3.0 (2026) band sizes are cumulative: 300 / 500 / 1,000 / 2,000 / 3,600 / 5,400.
+Profile uses those published totals. The unique-hanzi extract is a few dozen words short of each band; the leftover slots count as New.
 
 ## Official syllabus
 

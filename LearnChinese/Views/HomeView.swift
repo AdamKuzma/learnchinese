@@ -6,27 +6,66 @@
 import SwiftUI
 import SwiftData
 import Combine
+import UIKit
 
 struct HomeView: View {
     @EnvironmentObject private var blocker: AppBlocker
+    @Environment(\.modelContext) private var modelContext
     @Query private var cards: [Flashcard]
-    @Query private var progressRecords: [ItemProgress]
 
     @State private var showQuiz = false
+    @State private var showProfile = false
+    @State private var profileImage: UIImage?
 
     var body: some View {
         List {
-            statusSection
+            Section {
+                Text(greeting)
+                    .font(.title2.weight(.medium))
+                    .foregroundStyle(Color.appForeground)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, 16)
+                    .accessibilityAddTraits(.isHeader)
+            }
+            .listRowInsets(EdgeInsets(top: 20, leading: 4, bottom: 8, trailing: 4))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
 
-            progressSection
+            statusSection
 
             Section {
                 NavigationLink {
-                    ManageCardsView()
+                    ManageCardsView(kind: .vocabulary)
                 } label: {
-                    Label("Manage flashcards (\(cards.count))", systemImage: "rectangle.on.rectangle")
+                    Label {
+                        HStack(spacing: 6) {
+                            Text("Vocabulary")
+                            Text("\(vocabularyCards.count)")
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "book.closed.fill")
+                    }
                 }
             }
+            .appListRowBackground()
+
+            Section {
+                NavigationLink {
+                    ManageCardsView(kind: .grammar)
+                } label: {
+                    Label {
+                        HStack(spacing: 6) {
+                            Text("Grammar")
+                            Text("\(grammarCards.count)")
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "text.book.closed.fill")
+                    }
+                }
+            }
+            .appListRowBackground()
 
             Section {
                 NavigationLink {
@@ -35,41 +74,41 @@ struct HomeView: View {
                     Label("Daily Mission", systemImage: "flag.fill")
                 }
             }
-
-            Section("Lesson settings") {
-                Picker("Mode", selection: sessionModeBinding) {
-                    ForEach(SessionMode.allCases) { mode in
-                        Text("\(mode.title): \(mode.summary)").tag(mode)
-                    }
-                }
-                .pickerStyle(.menu)
-
-                Picker("Question type", selection: questionTypeBinding) {
-                    ForEach(QuestionTypeMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .pickerStyle(.menu)
-
-            }
+            .appListRowBackground()
 
             Section {
                 Button {
                     showQuiz = true
                 } label: {
-                    Label("Unlock with \(blocker.sessionMode.requiredCorrect) flashcards", systemImage: "lock.open.fill")
+                    HStack {
+                        Label("Start Lesson", systemImage: "play.fill")
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
                 }
                 .disabled(!canStartQuiz)
-
+            } footer: {
                 if !canStartQuiz {
                     Text(quizDisabledReason)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
                 }
             }
+            .appListRowBackground()
         }
-        .navigationTitle("Learn Chinese")
+        .appListChrome()
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    showProfile = true
+                } label: {
+                    ProfileAvatarImage(image: profileImage, size: 32)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Profile")
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 NavigationLink {
                     SettingsView()
@@ -79,78 +118,66 @@ struct HomeView: View {
                 .accessibilityLabel("Settings")
             }
         }
+        .sheet(isPresented: $showProfile) {
+            ProfileView(profileImage: profileImage)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
         .sheet(isPresented: $showQuiz) {
             NavigationStack {
-                QuizView(cards: cards)
+                QuizView(cards: vocabularyCards)
+            }
+            .appScreenBackground()
+        }
+        .onAppear {
+            blocker.refreshShieldState()
+            loadProfilePhoto()
+            Flashcard.capitalizeStoredVocabularyEnglish(in: modelContext)
+        }
+        .onChange(of: showProfile) { _, isShowing in
+            if !isShowing {
+                loadProfilePhoto()
             }
         }
-        .onAppear { blocker.refreshShieldState() }
+    }
+
+    private func loadProfilePhoto() {
+        if let data = SharedStore.profilePhotoData {
+            profileImage = UIImage(data: data)
+        } else {
+            profileImage = nil
+        }
+    }
+
+    private var greeting: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 5..<12: return "Good Morning"
+        case 12..<17: return "Good Afternoon"
+        default: return "Good Evening"
+        }
+    }
+
+    private var vocabularyCards: [Flashcard] {
+        cards.filter { $0.cardKind == .vocabulary }
+    }
+
+    private var grammarCards: [Flashcard] {
+        cards.filter { $0.cardKind == .grammar }
     }
 
     private var canStartQuiz: Bool {
-        cards.count >= 4 && blocker.hasBlockedApps
-    }
-
-    private var sessionModeBinding: Binding<SessionMode> {
-        Binding(
-            get: { blocker.sessionMode },
-            set: { blocker.updateSessionMode($0) }
-        )
-    }
-
-    private var questionTypeBinding: Binding<QuestionTypeMode> {
-        Binding(
-            get: { blocker.questionTypeMode },
-            set: { blocker.updateQuestionTypeMode($0) }
-        )
+        vocabularyCards.count >= 4 && blocker.hasBlockedApps
     }
 
     private var quizDisabledReason: String {
         if !blocker.hasBlockedApps {
             return "Select at least one app to block first."
         }
-        if cards.count < 4 {
-            return "Add at least 4 flashcards to start a quiz."
+        if vocabularyCards.count < 4 {
+            return "Add at least 4 vocabulary words to start a quiz."
         }
         return ""
-    }
-
-    @ViewBuilder
-    private var progressSection: some View {
-        let snapshot = ProgressService.snapshot(cards: cards, progress: progressRecords)
-        let summary = snapshot.summary(in: blocker.hskRange)
-        Section("HSK progress") {
-            NavigationLink {
-                HSKProgressView()
-            } label: {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(blocker.hskRange.title)
-                        .font(.headline)
-                    labeledBar(title: "Vocabulary", added: summary.vocabAdded, total: summary.vocabTotal)
-                    labeledBar(title: "Grammar", added: summary.grammarAdded, total: summary.grammarTotal)
-                    if snapshot.custom.added > 0 {
-                        Text("Custom \(snapshot.custom.added)")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.vertical, 4)
-            }
-        }
-    }
-
-    private func labeledBar(title: String, added: Int, total: Int) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(title)
-                Spacer()
-                Text("\(added)/\(total)")
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-            }
-            .font(.subheadline)
-            ProgressView(value: total == 0 ? 0 : Double(added), total: Double(max(total, 1)))
-        }
     }
 
     @ViewBuilder
@@ -158,6 +185,7 @@ struct HomeView: View {
         Section {
             StatusWithEnergyView()
         }
+        .appListRowBackground()
     }
 }
 
@@ -180,7 +208,7 @@ private struct StatusWithEnergyView: View {
         if !blocker.isAuthorized {
             VStack(alignment: .leading, spacing: 8) {
                 Label("Screen Time access not granted", systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color.appForeground)
                 Button("Grant access") {
                     Task { await blocker.requestAuthorization() }
                 }
@@ -189,7 +217,7 @@ private struct StatusWithEnergyView: View {
             UnlockCountdownView(unlockUntil: blocker.unlockUntil ?? .now, now: now)
         } else if blocker.isBlocking {
             Label("Apps are blocked", systemImage: "lock.fill")
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.appForeground)
         } else {
             Label("No apps blocked", systemImage: "lock.open")
                 .foregroundStyle(.secondary)
@@ -229,7 +257,7 @@ private struct UnlockCountdownView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Label("Apps unlocked", systemImage: "lock.open.fill")
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.appForeground)
             Text("Re-blocks in \(remainingText)")
                 .font(.title2.monospacedDigit().weight(.semibold))
         }

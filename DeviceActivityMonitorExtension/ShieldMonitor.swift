@@ -17,6 +17,7 @@ private enum SharedConfig {
     static let selectionKey = "blockedSelection"
     static let unlockUntilKey = "unlockUntil"
     static let energyDayStartKey = "energyDayStart"
+    static let unlockThresholdEventName = "LearnChineseUnlockThreshold"
 }
 
 class ShieldMonitor: DeviceActivityMonitor {
@@ -37,7 +38,19 @@ class ShieldMonitor: DeviceActivityMonitor {
         syncShield()
     }
 
-    private func syncShield() {
+    override func eventDidReachThreshold(_ event: DeviceActivityEvent.Name, activity: DeviceActivityName) {
+        super.eventDidReachThreshold(event, activity: activity)
+        // Usage of a blocked app reached the unlock length. Re-apply even if the
+        // wall-clock timestamp is a few seconds in the future.
+        syncShield(forceBlock: event.rawValue == SharedConfig.unlockThresholdEventName)
+    }
+
+    override func eventWillReachThresholdWarning(_ event: DeviceActivityEvent.Name, activity: DeviceActivityName) {
+        super.eventWillReachThresholdWarning(event, activity: activity)
+        syncShield()
+    }
+
+    private func syncShield(forceBlock: Bool = false) {
         let defaults = UserDefaults(suiteName: SharedConfig.appGroup)
         let now = Date()
 
@@ -50,7 +63,7 @@ class ShieldMonitor: DeviceActivityMonitor {
         }
 
         let unlockUntil = defaults?.double(forKey: SharedConfig.unlockUntilKey) ?? 0
-        if unlockUntil > now.timeIntervalSince1970 {
+        if !forceBlock, unlockUntil > now.timeIntervalSince1970 {
             clearShield()
             return
         }

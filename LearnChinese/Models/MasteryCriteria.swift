@@ -12,7 +12,7 @@ enum LearningStatus: String, Equatable, Sendable, CaseIterable {
 
     var title: String {
         switch self {
-        case .notLearned: return "Not learned"
+        case .notLearned: return "New"
         case .learning: return "Learning"
         case .mastered: return "Mastered"
         }

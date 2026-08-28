@@ -23,25 +23,30 @@ struct AppSelectionView: View {
             } footer: {
                 Text("Current lesson: \(blocker.sessionMode.title) (\(blocker.sessionMode.summary)).")
             }
+            .appListRowBackground()
 
             Section("Currently selected") {
                 let appCount = blocker.selection.applicationTokens.count
                 let categoryCount = blocker.selection.categoryTokens.count
 
-                if appCount == 0 && categoryCount == 0 {
-                    Text("Nothing selected")
-                        .foregroundStyle(.secondary)
-                } else {
-                    Label("\(appCount) app\(appCount == 1 ? "" : "s")", systemImage: "app.badge")
-                    if categoryCount > 0 {
-                        Label("\(categoryCount) categor\(categoryCount == 1 ? "y" : "ies")", systemImage: "folder")
-                    }
-                    Button("Clear selection", role: .destructive) {
-                        blocker.updateSelection(FamilyActivitySelection())
+                VStack(alignment: .leading, spacing: 12) {
+                    if appCount == 0 && categoryCount == 0 {
+                        Text("Nothing selected")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Label("\(appCount) app\(appCount == 1 ? "" : "s")", systemImage: "app.badge")
+                        if categoryCount > 0 {
+                            Label("\(categoryCount) categor\(categoryCount == 1 ? "y" : "ies")", systemImage: "folder")
+                        }
+                        Button("Clear selection", role: .destructive) {
+                            blocker.updateSelection(FamilyActivitySelection())
+                        }
                     }
                 }
             }
+            .appListRowBackground()
         }
+        .appListChrome()
         .navigationTitle("Apps to block")
         .familyActivityPicker(isPresented: $showPicker, selection: $draftSelection)
         .onChange(of: showPicker) { _, isShowing in

@@ -13,6 +13,7 @@ struct ContentView: View {
         NavigationStack {
             HomeView()
         }
+        .appScreenBackground()
     }
 }
 

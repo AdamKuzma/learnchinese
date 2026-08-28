@@ -50,148 +50,87 @@ enum ProgressService {
         return record
     }
 
+    @discardableResult
+    static func markShown(hanzi: String, in context: ModelContext, at date: Date = .now) -> ItemProgress {
+        let record = progress(for: hanzi, in: context)
+        record.lastShownAt = date
+        try? context.save()
+        return record
+    }
+
     static func snapshot(
         cards: [Flashcard],
         progress: [ItemProgress],
         catalog: HSKCatalog = .bundled
     ) -> HSKProgressSnapshot {
-        let addedKeys = Set(cards.map { HanziNormalizer.normalize($0.hanzi) }.filter { !$0.isEmpty })
+        let vocabCards = cards.filter { $0.cardKind == .vocabulary }
+        let addedKeys = Set(vocabCards.map { HanziNormalizer.normalize($0.hanzi) }.filter { !$0.isEmpty })
         let progressByKey = Dictionary(uniqueKeysWithValues: progress.map { ($0.normalizedHanzi, $0) })
 
-        func cardStatus(for hanzi: String) -> LearningStatus {
-            let keys = Set(HanziNormalizer.lookupKeys(for: hanzi))
-            let hasCard = addedKeys.contains(where: { keys.contains($0) })
-                || keys.contains(where: { addedKeys.contains($0) })
-            let record = keys.compactMap { progressByKey[$0] }.first
-            return status(
-                hasFlashcard: hasCard,
-                lessonConfirmations: record?.lessonConfirmations ?? 0,
-                dailyMissionCompletions: record?.dailyMissionCompletions ?? 0
-            )
-        }
-
+        var cumulativeLearning = 0
+        var cumulativeMastered = 0
+        var cumulativeCatalog = 0
         let levels = HSKRange.levels.map { level -> HSKLevelProgress in
             let vocabWords = catalog.vocab(level: level)
             var vocabLearning = 0
             var vocabMastered = 0
             for word in vocabWords {
-                switch cardStatus(for: word.hanzi) {
+                switch cardStatus(for: word.hanzi, addedKeys: addedKeys, progressByKey: progressByKey) {
                 case .learning: vocabLearning += 1
                 case .mastered: vocabMastered += 1
                 case .notLearned: break
                 }
             }
-
-            let grammarPoints = catalog.grammar(level: level)
-            var grammarLearning = 0
-            var grammarMastered = 0
-            for point in grammarPoints {
-                switch grammarStatus(point, addedKeys: addedKeys, progressByKey: progressByKey) {
-                case .learning: grammarLearning += 1
-                case .mastered: grammarMastered += 1
-                case .notLearned: break
-                }
-            }
-
+            cumulativeLearning += vocabLearning
+            cumulativeMastered += vocabMastered
+            cumulativeCatalog += vocabWords.count
+            let learned = cumulativeLearning + cumulativeMastered
+            let published = catalog.publishedCumulativeTotals[level] ?? cumulativeCatalog
             return HSKLevelProgress(
                 level: level,
-                vocabTotal: vocabWords.count,
-                vocabLearning: vocabLearning,
-                vocabMastered: vocabMastered,
-                grammarTotal: grammarPoints.count,
-                grammarLearning: grammarLearning,
-                grammarMastered: grammarMastered
+                vocabTotal: max(published, learned),
+                vocabLearning: cumulativeLearning,
+                vocabMastered: cumulativeMastered
             )
         }
 
-        var customLearning = 0
-        var customMastered = 0
-        for card in cards where catalog.isCustom(hanzi: card.hanzi) {
-            switch cardStatus(for: card.hanzi) {
-            case .learning: customLearning += 1
-            case .mastered: customMastered += 1
-            case .notLearned: break
-            }
-        }
-
-        return HSKProgressSnapshot(
-            levels: levels,
-            custom: CustomProgress(learning: customLearning, mastered: customMastered)
-        )
+        return HSKProgressSnapshot(levels: Array(levels))
     }
 
-    static func trackedItems(
-        level: Int?,
-        customOnly: Bool = false,
+    static func progress(
+        for level: Int,
         cards: [Flashcard],
         progress: [ItemProgress],
         catalog: HSKCatalog = .bundled
-    ) -> [TrackedItem] {
-        let addedKeys = Set(cards.map { HanziNormalizer.normalize($0.hanzi) }.filter { !$0.isEmpty })
+    ) -> HSKLevelProgress {
+        let clamped = min(max(level, HSKRange.levels.lowerBound), HSKRange.levels.upperBound)
+        let vocabCards = cards.filter { $0.cardKind == .vocabulary }
+        let addedKeys = Set(vocabCards.map { HanziNormalizer.normalize($0.hanzi) }.filter { !$0.isEmpty })
         let progressByKey = Dictionary(uniqueKeysWithValues: progress.map { ($0.normalizedHanzi, $0) })
-        let cardsByKey = Dictionary(
-            cards.map { (HanziNormalizer.normalize($0.hanzi), $0) },
-            uniquingKeysWith: { first, _ in first }
+
+        var vocabLearning = 0
+        var vocabMastered = 0
+        var catalogCount = 0
+        for candidate in HSKRange.levels where candidate <= clamped {
+            let vocabWords = catalog.vocab(level: candidate)
+            catalogCount += vocabWords.count
+            for word in vocabWords {
+                switch cardStatus(for: word.hanzi, addedKeys: addedKeys, progressByKey: progressByKey) {
+                case .learning: vocabLearning += 1
+                case .mastered: vocabMastered += 1
+                case .notLearned: break
+                }
+            }
+        }
+
+        let learned = vocabLearning + vocabMastered
+        let published = catalog.publishedCumulativeTotals[clamped] ?? catalogCount
+        return HSKLevelProgress(
+            level: clamped,
+            vocabTotal: max(published, learned),
+            vocabLearning: vocabLearning,
+            vocabMastered: vocabMastered
         )
-
-        if customOnly {
-            return cards.compactMap { card -> TrackedItem? in
-                guard catalog.isCustom(hanzi: card.hanzi) else { return nil }
-                return trackedFlashcard(card, progressByKey: progressByKey, kind: .custom, level: nil)
-            }
-            .sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
-        }
-
-        guard let level else { return [] }
-        var items: [TrackedItem] = []
-
-        for word in catalog.vocab(level: level) {
-            let itemStatus = cardStatus(
-                for: word.hanzi,
-                addedKeys: addedKeys,
-                progressByKey: progressByKey
-            )
-            guard itemStatus != .notLearned else { continue }
-            let record = progressRecord(for: word.hanzi, in: progress)
-            let card = matchingCard(for: word.hanzi, cardsByKey: cardsByKey)
-            items.append(
-                TrackedItem(
-                    id: "vocab-\(word.hanzi)",
-                    title: word.hanzi,
-                    subtitle: card?.pinyin.isEmpty == false ? (card?.pinyin ?? word.pinyin) : word.pinyin,
-                    kind: .vocab,
-                    level: level,
-                    status: itemStatus,
-                    lessonConfirmations: record?.lessonConfirmations ?? 0,
-                    dailyMissionCompletions: record?.dailyMissionCompletions ?? 0
-                )
-            )
-        }
-
-        for point in catalog.grammar(level: level) {
-            let itemStatus = grammarStatus(point, addedKeys: addedKeys, progressByKey: progressByKey)
-            guard itemStatus != .notLearned else { continue }
-            let record = bestProgress(for: point, progressByKey: progressByKey)
-            items.append(
-                TrackedItem(
-                    id: "grammar-\(point.id)",
-                    title: point.pattern.isEmpty ? point.id : point.pattern,
-                    subtitle: "Grammar",
-                    kind: .grammar,
-                    level: level,
-                    status: itemStatus,
-                    lessonConfirmations: record?.lessonConfirmations ?? 0,
-                    dailyMissionCompletions: record?.dailyMissionCompletions ?? 0
-                )
-            )
-        }
-
-        return items.sorted { lhs, rhs in
-            if lhs.status != rhs.status {
-                return lhs.status == .mastered && rhs.status == .learning
-            }
-            return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
-        }
     }
 
     static func learningDeckTargets(
@@ -201,6 +140,7 @@ enum ProgressService {
         catalog: HSKCatalog = .bundled
     ) -> [Flashcard] {
         cards.filter { card in
+            guard card.cardKind == .vocabulary else { return false }
             guard let level = catalog.vocab(for: card.hanzi)?.level, range.contains(level) else {
                 return false
             }
@@ -237,79 +177,6 @@ enum ProgressService {
         let record = keys.compactMap { progressByKey[$0] }.first
         return status(
             hasFlashcard: hasCard,
-            lessonConfirmations: record?.lessonConfirmations ?? 0,
-            dailyMissionCompletions: record?.dailyMissionCompletions ?? 0
-        )
-    }
-
-    private static func grammarStatus(
-        _ point: HSKGrammarPoint,
-        addedKeys: Set<String>,
-        progressByKey: [String: ItemProgress]
-    ) -> LearningStatus {
-        let tokens = grammarTokens(point)
-        var sawLearning = false
-        var sawMastered = false
-        for token in tokens {
-            switch cardStatus(for: token, addedKeys: addedKeys, progressByKey: progressByKey) {
-            case .mastered: sawMastered = true
-            case .learning: sawLearning = true
-            case .notLearned: break
-            }
-        }
-        if sawMastered { return .mastered }
-        if sawLearning { return .learning }
-        return .notLearned
-    }
-
-    private static func grammarTokens(_ point: HSKGrammarPoint) -> [String] {
-        var tokens = point.matchTokens.map(HanziNormalizer.normalize)
-        let pattern = HanziNormalizer.normalize(point.pattern)
-        if !pattern.isEmpty { tokens.append(pattern) }
-        return tokens.filter { !$0.isEmpty }
-    }
-
-    private static func bestProgress(
-        for point: HSKGrammarPoint,
-        progressByKey: [String: ItemProgress]
-    ) -> ItemProgress? {
-        grammarTokens(point)
-            .flatMap { HanziNormalizer.lookupKeys(for: $0) }
-            .compactMap { progressByKey[$0] }
-            .max {
-                ($0.lessonConfirmations + $0.dailyMissionCompletions * 100)
-                    < ($1.lessonConfirmations + $1.dailyMissionCompletions * 100)
-            }
-    }
-
-    private static func matchingCard(for hanzi: String, cardsByKey: [String: Flashcard]) -> Flashcard? {
-        for key in HanziNormalizer.lookupKeys(for: hanzi) {
-            if let card = cardsByKey[key] {
-                return card
-            }
-        }
-        return nil
-    }
-
-    private static func trackedFlashcard(
-        _ card: Flashcard,
-        progressByKey: [String: ItemProgress],
-        kind: TrackedItemKind,
-        level: Int?
-    ) -> TrackedItem {
-        let key = HanziNormalizer.normalize(card.hanzi)
-        let record = progressByKey[key]
-        return TrackedItem(
-            id: "custom-\(key)",
-            title: card.hanzi,
-            subtitle: card.pinyin,
-            kind: kind,
-            level: level,
-            status: status(
-                hasFlashcard: true,
-                lessonConfirmations: record?.lessonConfirmations ?? 0,
-                dailyMissionCompletions: record?.dailyMissionCompletions ?? 0
-            ),
             lessonConfirmations: record?.lessonConfirmations ?? 0,
             dailyMissionCompletions: record?.dailyMissionCompletions ?? 0
         )
