@@ -11,12 +11,17 @@ struct HomeView: View {
     @EnvironmentObject private var blocker: AppBlocker
     @Query private var cards: [Flashcard]
     @Query private var progressRecords: [ItemProgress]
+    @Query private var activities: [DailyActivity]
 
     @State private var showQuiz = false
 
     var body: some View {
         List {
             statusSection
+
+            Section("Streak") {
+                StreakSectionView(activities: activities)
+            }
 
             progressSection
 

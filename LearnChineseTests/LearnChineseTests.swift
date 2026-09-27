@@ -131,8 +131,9 @@ struct HSKCatalogTests {
 struct ProgressAggregationTests {
     @MainActor
     private func makeContext() throws -> ModelContext {
-        let configuration = ModelConfiguration(UUID().uuidString, schema: Schema([Flashcard.self, ItemProgress.self]), isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: Schema([Flashcard.self, ItemProgress.self]), configurations: configuration)
+        let schema = Schema([Flashcard.self, ItemProgress.self, DailyActivity.self])
+        let configuration = ModelConfiguration(UUID().uuidString, schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: configuration)
         return ModelContext(container)
     }
 
@@ -271,5 +272,85 @@ struct ProgressAggregationTests {
         let stored = ProgressService.progress(for: "爱", in: context)
         #expect(stored.lessonConfirmations == 2)
         #expect(stored.dailyMissionCompletions == 0)
+    }
+
+    @MainActor
+    @Test func lessonAndMissionIncreaseTodaysActivity() throws {
+        let context = try makeContext()
+        ProgressService.recordLessonConfirmation(hanzi: "爱", in: context)
+        ProgressService.recordLessonConfirmation(hanzi: "爱", in: context)
+        ProgressService.recordMissionCompletion(hanzi: "爱", in: context)
+
+        let activities = try context.fetch(FetchDescriptor<DailyActivity>())
+        #expect(activities.count == 1)
+        #expect(activities.first?.count == 3)
+    }
+}
+
+struct StreakCalendarTests {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        calendar.locale = Locale(identifier: "en_US_POSIX")
+        calendar.firstWeekday = 1
+        return calendar
+    }
+
+    private func day(_ year: Int, _ month: Int, _ day: Int) -> Date {
+        calendar.date(from: DateComponents(year: year, month: month, day: day))!
+    }
+
+    @Test func busiestDayStaysFullyDarkAndQuieterDaysAreLighter() {
+        let peak = 4
+        #expect(StreakCalendar.opacity(count: peak, peak: peak) == 1)
+        let quieter = StreakCalendar.opacity(count: 2, peak: peak)
+        let quietest = StreakCalendar.opacity(count: 1, peak: peak)
+        #expect(quieter < 1)
+        #expect(quietest < quieter)
+        #expect(quietest > StreakCalendar.emptyOpacity)
+        #expect(StreakCalendar.opacity(count: 0, peak: peak) == StreakCalendar.emptyOpacity)
+    }
+
+    @Test func aSingleActivityLevelStaysAtFullDarkness() {
+        #expect(StreakCalendar.opacity(count: 1, peak: 1) == 1)
+        #expect(StreakCalendar.opacity(count: 3, peak: 3) == 1)
+    }
+
+    @Test func streakCountsConsecutiveStudyDays() {
+        let today = day(2026, 9, 27)
+        let counts = [
+            day(2026, 9, 27): 2,
+            day(2026, 9, 26): 1,
+            day(2026, 9, 25): 4,
+            day(2026, 9, 23): 3
+        ]
+        #expect(StreakCalendar.currentStreak(dayCounts: counts, now: today, calendar: calendar) == 3)
+    }
+
+    @Test func emptyTodayStillCountsYesterdaysStreak() {
+        let today = day(2026, 9, 27)
+        let counts = [
+            day(2026, 9, 26): 2,
+            day(2026, 9, 25): 1
+        ]
+        #expect(StreakCalendar.currentStreak(dayCounts: counts, now: today, calendar: calendar) == 2)
+    }
+
+    @Test func aMissedDayBreaksTheStreak() {
+        let today = day(2026, 9, 27)
+        let counts = [
+            day(2026, 9, 25): 4
+        ]
+        #expect(StreakCalendar.currentStreak(dayCounts: counts, now: today, calendar: calendar) == 0)
+    }
+
+    @Test func peakIgnoresDaysAfterToday() {
+        let today = day(2026, 9, 27)
+        let days = [day(2026, 9, 26), day(2026, 9, 27), day(2026, 9, 28)]
+        let counts = [
+            day(2026, 9, 26): 2,
+            day(2026, 9, 28): 9
+        ]
+        #expect(StreakCalendar.peak(in: days, dayCounts: counts, through: today, calendar: calendar) == 2)
     }
 }

@@ -38,6 +38,7 @@ enum ProgressService {
     static func recordLessonConfirmation(hanzi: String, in context: ModelContext) -> ItemProgress {
         let record = progress(for: hanzi, in: context)
         record.lessonConfirmations += 1
+        recordActivity(in: context)
         try? context.save()
         return record
     }
@@ -46,8 +47,23 @@ enum ProgressService {
     static func recordMissionCompletion(hanzi: String, in context: ModelContext) -> ItemProgress {
         let record = progress(for: hanzi, in: context)
         record.dailyMissionCompletions += 1
+        recordActivity(in: context)
         try? context.save()
         return record
+    }
+
+    static func recordActivity(
+        on date: Date = .now,
+        in context: ModelContext,
+        calendar: Calendar = .current
+    ) {
+        let start = calendar.startOfDay(for: date)
+        let existing = (try? context.fetch(FetchDescriptor<DailyActivity>())) ?? []
+        if let match = existing.first(where: { calendar.isDate($0.dayStart, inSameDayAs: start) }) {
+            match.count += 1
+        } else {
+            context.insert(DailyActivity(dayStart: start, count: 1))
+        }
     }
 
     static func snapshot(
