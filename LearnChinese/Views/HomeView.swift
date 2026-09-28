@@ -20,18 +20,20 @@ struct HomeView: View {
     var body: some View {
         List {
             Section {
-                Text(greeting)
-                    .font(.title2.weight(.medium))
-                    .foregroundStyle(Color.appForeground)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.bottom, 16)
-                    .accessibilityAddTraits(.isHeader)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(greeting)
+                        .font(.title2.weight(.medium))
+                        .foregroundStyle(Color.appForeground)
+                        .accessibilityAddTraits(.isHeader)
+
+                    BlockStatusLine()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, 16)
             }
             .listRowInsets(EdgeInsets(top: 20, leading: 4, bottom: 8, trailing: 4))
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
-
-            statusSection
 
             Section {
                 NavigationLink {
@@ -132,6 +134,7 @@ struct HomeView: View {
         .onAppear {
             blocker.refreshShieldState()
             loadProfilePhoto()
+            Flashcard.restoreSavedKinds(in: modelContext)
             Flashcard.capitalizeStoredVocabularyEnglish(in: modelContext)
         }
         .onChange(of: showProfile) { _, isShowing in
@@ -179,94 +182,57 @@ struct HomeView: View {
         }
         return ""
     }
-
-    @ViewBuilder
-    private var statusSection: some View {
-        Section {
-            StatusWithEnergyView()
-        }
-        .appListRowBackground()
-    }
 }
 
-private struct StatusWithEnergyView: View {
+private struct BlockStatusLine: View {
     @EnvironmentObject private var blocker: AppBlocker
     @State private var now = Date()
 
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            statusLabel
-            EnergyBarView(remainingMinutes: blocker.remainingEnergyMinutes(at: now))
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: iconName)
+                Text(statusText)
+            }
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+
+            if !blocker.isAuthorized {
+                Button("Grant access") {
+                    Task { await blocker.requestAuthorization() }
+                }
+                .font(.subheadline)
+            }
         }
         .onReceive(timer) { now = $0 }
     }
 
-    @ViewBuilder
-    private var statusLabel: some View {
+    private var iconName: String {
         if !blocker.isAuthorized {
-            VStack(alignment: .leading, spacing: 8) {
-                Label("Screen Time access not granted", systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(Color.appForeground)
-                Button("Grant access") {
-                    Task { await blocker.requestAuthorization() }
-                }
-            }
-        } else if blocker.isUnlocked {
-            UnlockCountdownView(unlockUntil: blocker.unlockUntil ?? .now, now: now)
-        } else if blocker.isBlocking {
-            Label("Apps are blocked", systemImage: "lock.fill")
-                .foregroundStyle(Color.appForeground)
-        } else {
-            Label("No apps blocked", systemImage: "lock.open")
-                .foregroundStyle(.secondary)
+            return "exclamationmark.triangle.fill"
         }
-    }
-}
-
-private struct EnergyBarView: View {
-    let remainingMinutes: Double
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("Energy")
-                Spacer()
-                Text("\(displayMinutes) / \(Energy.capMinutes) min")
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-            }
-            .font(.subheadline)
-
-            ProgressView(value: remainingMinutes, total: Double(Energy.capMinutes))
+        if blocker.isUnlocked {
+            return "lock.open"
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Energy \(displayMinutes) of \(Energy.capMinutes) minutes")
-    }
-
-    private var displayMinutes: Int {
-        min(Energy.capMinutes, max(0, Int(remainingMinutes.rounded(.down))))
-    }
-}
-
-private struct UnlockCountdownView: View {
-    let unlockUntil: Date
-    let now: Date
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Label("Apps unlocked", systemImage: "lock.open.fill")
-                .foregroundStyle(Color.appForeground)
-            Text("Re-blocks in \(remainingText)")
-                .font(.title2.monospacedDigit().weight(.semibold))
+        if blocker.isBlocking {
+            return "lock.fill"
         }
+        return "lock.open"
     }
 
-    private var remainingText: String {
-        let remaining = max(0, Int(unlockUntil.timeIntervalSince(now)))
-        let minutes = remaining / 60
-        let seconds = remaining % 60
-        return String(format: "%d:%02d", minutes, seconds)
+    private var statusText: String {
+        if !blocker.isAuthorized {
+            return "Screen Time access not granted"
+        }
+        if blocker.isUnlocked {
+            let minutes = max(0, Int(blocker.remainingEnergyMinutes(at: now).rounded(.down)))
+            return "Apps unlocked for \(minutes)min"
+        }
+        if blocker.isBlocking {
+            return "Apps locked"
+        }
+        return "No apps blocked"
     }
 }

@@ -10,6 +10,7 @@ enum VocabularySortMode: String, CaseIterable, Identifiable, Codable {
     case alphabetical
     case partOfSpeech
     case hskLevel
+    case mastery
 
     var id: String { rawValue }
 
@@ -19,6 +20,7 @@ enum VocabularySortMode: String, CaseIterable, Identifiable, Codable {
         case .alphabetical: return "Alphabetical"
         case .partOfSpeech: return "Part of speech"
         case .hskLevel: return "Level"
+        case .mastery: return "Mastery"
         }
     }
 }
@@ -37,7 +39,8 @@ enum VocabularyListSorter {
         cards: [Flashcard],
         mode: VocabularySortMode,
         ascending: Bool,
-        catalog: HSKCatalog = .bundled
+        catalog: HSKCatalog = .bundled,
+        progress: [ItemProgress] = []
     ) -> [VocabularyListSection] {
         switch mode {
         case .recent:
@@ -57,6 +60,9 @@ enum VocabularyListSorter {
 
         case .hskLevel:
             return groupedByHSK(cards, ascending: ascending, catalog: catalog)
+
+        case .mastery:
+            return groupedByMastery(cards, ascending: ascending, progress: progress)
         }
     }
 
@@ -139,6 +145,47 @@ enum VocabularyListSorter {
             )
         }
         return sections
+    }
+
+    private static func groupedByMastery(
+        _ cards: [Flashcard],
+        ascending: Bool,
+        progress: [ItemProgress]
+    ) -> [VocabularyListSection] {
+        let progressByKey = Dictionary(uniqueKeysWithValues: progress.map { ($0.normalizedHanzi, $0) })
+        var grouped: [Int: [Flashcard]] = [:]
+
+        for card in cards {
+            let stars = starCount(for: card, progressByKey: progressByKey)
+            grouped[stars, default: []].append(card)
+        }
+
+        let counts = grouped.keys.sorted { lhs, rhs in
+            ascending ? lhs < rhs : lhs > rhs
+        }
+
+        return counts.map { count in
+            VocabularyListSection(
+                id: "mastery-\(count)",
+                title: masteryTitle(for: count),
+                cards: grouped[count]!.sorted { comparePinyin($0, $1, ascending: true) }
+            )
+        }
+    }
+
+    private static func starCount(for card: Flashcard, progressByKey: [String: ItemProgress]) -> Int {
+        let keys = HanziNormalizer.lookupKeys(for: card.hanzi)
+        let record = keys.compactMap { progressByKey[$0] }.first
+        return VocabStars.count(for: record)
+    }
+
+    private static func masteryTitle(for count: Int) -> String {
+        switch count {
+        case 1: return "1 star"
+        case 2: return "2 stars"
+        case 3: return "3 stars"
+        default: return "No stars"
+        }
     }
 
     private static func comparePinyin(_ lhs: Flashcard, _ rhs: Flashcard, ascending: Bool) -> Bool {

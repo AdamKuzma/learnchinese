@@ -10,15 +10,13 @@ import UIKit
 struct ManageCardsView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Flashcard.createdAt, order: .reverse) private var allCards: [Flashcard]
+    @Query private var progressRecords: [ItemProgress]
 
     let kind: FlashcardKind
 
     @State private var showAdd = false
     @State private var selectedCard: Flashcard?
     @State private var searchText = ""
-    @State private var searchReveal = PullToRevealSearchState()
-    @State private var scrollPhase: SearchRevealScrollPhase = .idle
-    @FocusState private var isSearchFocused: Bool
     @AppStorage("vocabularySortMode") private var sortModeRaw = VocabularySortMode.recent.rawValue
     @AppStorage("vocabularySortAscending") private var sortAscending = false
 
@@ -42,7 +40,8 @@ struct ManageCardsView: View {
         return VocabularyListSorter.sections(
             cards: filteredCards,
             mode: sortMode,
-            ascending: sortAscending
+            ascending: sortAscending,
+            progress: progressRecords
         )
     }
 
@@ -77,56 +76,13 @@ struct ManageCardsView: View {
                 }
             }
         }
-        .onScrollGeometryChange(for: CGFloat.self) { geometry in
-            geometry.contentOffset.y + geometry.contentInsets.top
-        } action: { _, offsetFromTop in
-            var transaction = Transaction()
-            if scrollPhase == .userDragging {
-                transaction.disablesAnimations = true
-            }
-            withTransaction(transaction) {
-                searchReveal.handleScroll(
-                    offsetFromTop: offsetFromTop,
-                    phase: scrollPhase,
-                    isLockedOpen: isSearchLockedOpen
-                )
-            }
-        }
-        .onScrollPhaseChange { oldPhase, newPhase, context in
-            let oldMapped = SearchRevealScrollPhase(oldPhase)
-            let newMapped = SearchRevealScrollPhase(newPhase)
-            scrollPhase = newMapped
-            if oldMapped == .userDragging, newMapped != .userDragging {
-                let offsetFromTop = context.geometry.contentOffset.y + context.geometry.contentInsets.top
-                searchReveal.handleScroll(
-                    offsetFromTop: offsetFromTop,
-                    phase: .userDragging,
-                    isLockedOpen: isSearchLockedOpen
-                )
-                withAnimation(.easeOut(duration: 0.22)) {
-                    searchReveal.handleDragEnded(isLockedOpen: isSearchLockedOpen)
-                }
-                if !searchReveal.isExpanded {
-                    isSearchFocused = false
-                }
-            }
-        }
-        .scrollDismissesKeyboard(.immediately)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            if searchReveal.isExpanded {
-                searchField(interactive: true)
-            }
-        }
-        .overlay(alignment: .top) {
-            if !searchReveal.isExpanded, searchReveal.revealedHeight > 0 {
-                searchField(interactive: false)
-                    .frame(height: searchReveal.revealedHeight, alignment: .top)
-                    .clipped()
-                    .allowsHitTesting(false)
-            }
-        }
         .appListChrome()
         .navigationTitle(kind == .grammar ? "Grammar" : "Vocabulary")
+        .searchable(
+            text: $searchText,
+            placement: .navigationBarDrawer(displayMode: .automatic),
+            prompt: "Search"
+        )
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 if kind == .vocabulary {
@@ -138,12 +94,6 @@ struct ManageCardsView: View {
                     Image(systemName: "plus")
                 }
             }
-        }
-        .accessibilityAction(named: "Search") {
-            withAnimation(.easeOut(duration: 0.22)) {
-                searchReveal.expand()
-            }
-            isSearchFocused = true
         }
         .sheet(isPresented: $showAdd) {
             NavigationStack {
@@ -189,47 +139,6 @@ struct ManageCardsView: View {
         .accessibilityLabel("Sort vocabulary")
     }
 
-    private var isSearchLockedOpen: Bool {
-        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    private func searchField(interactive: Bool) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-            if interactive {
-                TextField("Search", text: $searchText)
-                    .focused($isSearchFocused)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .submitLabel(.search)
-            } else {
-                Text("Search")
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 0)
-            }
-            if interactive, !searchText.isEmpty {
-                Button {
-                    searchText = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.tertiary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Clear search")
-            }
-        }
-        .padding(.horizontal, 12)
-        .frame(height: 36)
-        .background(
-            Color(uiColor: .tertiarySystemFill),
-            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-        )
-        .padding(.horizontal, 16)
-        .padding(.top, 4)
-        .padding(.bottom, 12)
-    }
-
     private var sortModeBinding: Binding<VocabularySortMode> {
         Binding(
             get: { sortMode },
@@ -241,20 +150,32 @@ struct ManageCardsView: View {
         Button {
             selectedCard = card
         } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(card.hanzi)
-                    .font(.title3)
-                Text(card.pinyin)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Text(card.displayEnglish)
-                    .font(.subheadline)
+            ZStack(alignment: .topTrailing) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(card.hanzi)
+                        .font(.title3)
+                    Text(card.pinyin)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Text(card.displayEnglish)
+                        .font(.subheadline)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.trailing, kind == .vocabulary ? 28 : 0)
+
+                if kind == .vocabulary {
+                    PixelStarRating(count: VocabStars.count(for: progressRecord(for: card)))
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .appListRowBackground()
+    }
+
+    private func progressRecord(for card: Flashcard) -> ItemProgress? {
+        let keys = Set(HanziNormalizer.lookupKeys(for: card.hanzi))
+        return progressRecords.first { keys.contains($0.normalizedHanzi) }
     }
 
     private func delete(from sectionCards: [Flashcard], offsets: IndexSet) {
@@ -264,22 +185,7 @@ struct ManageCardsView: View {
     }
 }
 
-private extension SearchRevealScrollPhase {
-    init(_ phase: ScrollPhase) {
-        switch phase {
-        case .interacting, .tracking:
-            self = .userDragging
-        case .decelerating, .animating:
-            self = .coasting
-        case .idle:
-            self = .idle
-        @unknown default:
-            self = .idle
-        }
-    }
-}
-
-private struct AddCardView: View {
+struct AddCardView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
 

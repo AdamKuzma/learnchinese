@@ -23,7 +23,7 @@ final class Flashcard {
     var memoryHintChinese: String?
     var memoryHintEnglish: String?
     var detailsGeneratedAt: Date?
-    var kind: String = FlashcardKind.vocabulary.rawValue
+    @Attribute var kind: String = FlashcardKind.vocabulary.rawValue
     var partOfSpeechJSON: String?
     var characterBreakdownJSON: String?
     var exampleSentencesJSON: String?
@@ -63,6 +63,31 @@ final class Flashcard {
         if didChange {
             try? context.save()
         }
+    }
+
+    /// Older stores never persisted `kind`, so grammar cards reload as vocabulary.
+    static func restoreSavedKinds(in context: ModelContext, catalog: HSKCatalog = .bundled) {
+        guard let cards = try? context.fetch(FetchDescriptor<Flashcard>()) else { return }
+        var didChange = false
+        for card in cards where card.cardKind == .vocabulary {
+            let fromCatalog = catalog.preferredSavedKind(for: card.hanzi) == .grammar
+            guard fromCatalog || looksLikeGrammarDefinition(card.english) else { continue }
+            card.cardKind = .grammar
+            didChange = true
+        }
+        if didChange {
+            try? context.save()
+        }
+    }
+
+    /// Mission grammar meanings are long explanations, usually "Used to…" / "Used after…".
+    static func looksLikeGrammarDefinition(_ english: String) -> Bool {
+        let trimmed = english.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 16 else { return false }
+        let lower = trimmed.lowercased()
+        guard lower.hasPrefix("used") else { return false }
+        guard let separator = lower.dropFirst(4).first else { return false }
+        return separator == " " || separator == "-" || separator == ","
     }
 
     var hasGeneratedDetails: Bool {

@@ -9,6 +9,7 @@ struct SettingsView: View {
     @EnvironmentObject private var blocker: AppBlocker
     @State private var hskLevel = SharedStore.hskLevel
     @State private var missionDifficulty = SharedStore.missionDifficulty
+    @State private var missionVocabSource = SharedStore.missionVocabSource
     @State private var missionThemes = SharedStore.missionThemes
 
     var body: some View {
@@ -64,6 +65,13 @@ struct SettingsView: View {
                         value: missionDifficultyBinding,
                         accessibilityLabel: "Difficulty"
                     )
+
+                    Picker("Vocabulary", selection: missionVocabSourceBinding) {
+                        ForEach(MissionVocabSource.allCases) { source in
+                            Text(source.settingsTitle).tag(source)
+                        }
+                    }
+                    .pickerStyle(.menu)
                 }
                 .appListRowBackground()
             }
@@ -109,6 +117,7 @@ struct SettingsView: View {
         .onAppear {
             hskLevel = SharedStore.hskLevel
             missionDifficulty = SharedStore.missionDifficulty
+            missionVocabSource = SharedStore.missionVocabSource
             missionThemes = SharedStore.missionThemes
         }
     }
@@ -143,6 +152,16 @@ struct SettingsView: View {
             set: { newDifficulty in
                 missionDifficulty = newDifficulty
                 SharedStore.missionDifficulty = newDifficulty
+            }
+        )
+    }
+
+    private var missionVocabSourceBinding: Binding<MissionVocabSource> {
+        Binding(
+            get: { missionVocabSource },
+            set: { newSource in
+                missionVocabSource = newSource
+                SharedStore.missionVocabSource = newSource
             }
         )
     }

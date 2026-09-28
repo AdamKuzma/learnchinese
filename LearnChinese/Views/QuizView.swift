@@ -181,6 +181,8 @@ struct QuizView: View {
         if option == question.answer {
             correctCount += 1
             ProgressService.recordLessonConfirmation(hanzi: question.promptCard.hanzi, in: modelContext)
+        } else {
+            ProgressService.recordLessonMiss(hanzi: question.promptCard.hanzi, in: modelContext)
         }
 
         let completed = correctCount >= required

@@ -27,6 +27,7 @@ struct DailyMissionView: View {
     @State private var energyGranted = 0
     @State private var savedVocabularyHanzi: Set<String> = []
     @State private var savedGrammarHanzi: Set<String> = []
+    @State private var lastTargetKeys: Set<String> = []
     @State private var loaderPattern = AgentPixelLoader.Pattern.allCases.randomElement()!
     @State private var loaderMessage = DailyMissionView.loadingMessages[0]
 
@@ -41,10 +42,17 @@ struct DailyMissionView: View {
             if phase == .generating {
                 VStack(spacing: 20) {
                     AgentPixelLoader(pattern: loaderPattern, accessibilityLabel: loaderMessage)
-                    Text(loaderMessage)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
+                    ZStack {
+                        Text(loaderMessage)
+                            .id(loaderMessage)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .transition(Self.loadingMessageTransition)
+                    }
+                    .frame(maxWidth: 260)
+                    .frame(height: 40)
+                    .clipped()
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.appBackground.ignoresSafeArea())
@@ -119,42 +127,29 @@ struct DailyMissionView: View {
 
     @ViewBuilder
     private func missionSections(_ mission: DailyMission) -> some View {
-        AppLabeledBlock(title: mission.focus.sectionTitle) {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(mission.hanzi)
-                        .font(.largeTitle.weight(.semibold))
-                        .minimumScaleFactor(0.55)
-                        .lineLimit(2)
-                    if !mission.pinyin.isEmpty {
-                        Text(mission.pinyin)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(mission.meaning.capitalizingFirstLetter())
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-                .contextMenu {
-                    Button("Copy") {
-                        UIPasteboard.general.string = mission.hanzi
-                    }
-                } preview: {
-                    targetWordPreview(mission)
-                }
-
-                Button {
-                    toggleTargetWordInFlashcards()
-                } label: {
-                    Image(systemName: isSaved(mission.hanzi, kind: targetKind) ? "checkmark.circle.fill" : "plus.circle")
-                }
-                .font(.title2)
-                .accessibilityLabel(
-                    isSaved(mission.hanzi, kind: targetKind)
-                        ? (targetKind == .grammar ? "Remove from Grammar" : "Remove from Vocabulary")
-                        : (targetKind == .grammar ? "Add to Grammar" : "Add to Vocabulary")
-                )
-            }
+        if mission.hasGrammarTarget {
+            targetSection(
+                title: MissionFocus.vocabulary.sectionTitle,
+                hanzi: mission.hanzi,
+                pinyin: mission.pinyin,
+                meaning: mission.meaning,
+                kind: .vocabulary
+            )
+            targetSection(
+                title: MissionFocus.grammar.sectionTitle,
+                hanzi: mission.grammarHanzi,
+                pinyin: mission.grammarPinyin,
+                meaning: mission.grammarMeaning,
+                kind: .grammar
+            )
+        } else {
+            targetSection(
+                title: mission.focus.sectionTitle,
+                hanzi: mission.hanzi,
+                pinyin: mission.pinyin,
+                meaning: mission.meaning,
+                kind: targetKind
+            )
         }
 
         AppLabeledBlock(title: "Situation") {
@@ -244,7 +239,7 @@ struct DailyMissionView: View {
             TappableChineseSentence(
                 words: words,
                 font: font,
-                savedHanzi: savedHanzi(for: .vocabulary),
+                savedHanzi: savedHanzi(for: .vocabulary).union(savedHanzi(for: .grammar)),
                 onToggle: toggleWordInFlashcards
             )
             if showPinyin.wrappedValue, !pinyin.isEmpty {
@@ -272,16 +267,65 @@ struct DailyMissionView: View {
         }
     }
 
-    private func targetWordPreview(_ mission: DailyMission) -> some View {
+    private func targetSection(
+        title: String,
+        hanzi: String,
+        pinyin: String,
+        meaning: String,
+        kind: FlashcardKind
+    ) -> some View {
+        AppLabeledBlock(title: title) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(hanzi)
+                        .font(.largeTitle.weight(.semibold))
+                        .minimumScaleFactor(0.55)
+                        .lineLimit(2)
+                    if !pinyin.isEmpty {
+                        Text(pinyin)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(meaning.capitalizingFirstLetter())
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .contextMenu {
+                    Button("Copy") {
+                        UIPasteboard.general.string = hanzi
+                    }
+                } preview: {
+                    targetWordPreview(hanzi: hanzi, pinyin: pinyin, meaning: meaning)
+                }
+
+                Button {
+                    toggleWordInFlashcards(
+                        MissionWord(hanzi: hanzi, pinyin: pinyin, english: meaning),
+                        kind: kind
+                    )
+                } label: {
+                    Image(systemName: isSaved(hanzi, kind: kind) ? "checkmark.circle.fill" : "plus.circle")
+                }
+                .font(.title2)
+                .accessibilityLabel(
+                    isSaved(hanzi, kind: kind)
+                        ? (kind == .grammar ? "Remove from Grammar" : "Remove from Vocabulary")
+                        : (kind == .grammar ? "Add to Grammar" : "Add to Vocabulary")
+                )
+            }
+        }
+    }
+
+    private func targetWordPreview(hanzi: String, pinyin: String, meaning: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(mission.hanzi)
+            Text(hanzi)
                 .font(.largeTitle.weight(.semibold))
-            if !mission.pinyin.isEmpty {
-                Text(mission.pinyin)
+            if !pinyin.isEmpty {
+                Text(pinyin)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            Text(mission.meaning.capitalizingFirstLetter())
+            Text(meaning.capitalizingFirstLetter())
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
@@ -342,6 +386,13 @@ struct DailyMissionView: View {
                     mission?.focus.usedCorrectlyLabel ?? "Target word used correctly",
                     evaluation.targetWordUsedCorrectly ? "Yes" : "No"
                 )
+                if mission?.hasGrammarTarget == true {
+                    resultSeparator
+                    resultRow(
+                        MissionFocus.grammar.usedCorrectlyLabel,
+                        evaluation.targetGrammarUsedCorrectly ? "Yes" : "No"
+                    )
+                }
             }
         }
 
@@ -394,6 +445,28 @@ struct DailyMissionView: View {
         "Getting the mission ready"
     ]
 
+    private struct LoadingMessageAppearance: ViewModifier {
+        var blur: CGFloat
+        var opacity: Double
+
+        func body(content: Content) -> some View {
+            content
+                .blur(radius: blur)
+                .opacity(opacity)
+        }
+    }
+
+    private static let loadingMessageTransition = AnyTransition.asymmetric(
+        insertion: .move(edge: .top).combined(with: .modifier(
+            active: LoadingMessageAppearance(blur: 10, opacity: 0),
+            identity: LoadingMessageAppearance(blur: 0, opacity: 1)
+        )),
+        removal: .move(edge: .bottom).combined(with: .modifier(
+            active: LoadingMessageAppearance(blur: 10, opacity: 0),
+            identity: LoadingMessageAppearance(blur: 0, opacity: 1)
+        ))
+    )
+
     private static func nextLoadingMessage(after current: String) -> String {
         let messages = loadingMessages
         guard let index = messages.firstIndex(of: current) else {
@@ -422,25 +495,57 @@ struct DailyMissionView: View {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
                 guard !Task.isCancelled, phase == .generating else { return }
-                loaderMessage = Self.nextLoadingMessage(after: loaderMessage)
+                withAnimation(.easeInOut(duration: 0.4)) {
+                    loaderMessage = Self.nextLoadingMessage(after: loaderMessage)
+                }
             }
         }
         defer { rotateMessages.cancel() }
 
         do {
-            let targetCard = CardPicker.pick(from: cards, progress: progressRecords)
-            let targetWord = targetCard.map { DailyMissionTargetWord(card: $0) }
+            let difficulty = SharedStore.missionDifficulty
+            let vocabSource = SharedStore.missionVocabSource
+            let dualTargets = difficulty.usesDualTargets
+                ? CardPicker.pickDualMissionTargets(
+                    level: SharedStore.hskLevel,
+                    cards: cards,
+                    progress: progressRecords,
+                    source: vocabSource,
+                    lastKeys: lastTargetKeys
+                )
+                : nil
+            let targetWord: DailyMissionTargetWord?
+            let grammarTarget: DailyMissionTargetWord?
+            if let dualTargets {
+                targetWord = dualTargets.vocabulary
+                grammarTarget = dualTargets.grammar
+            } else {
+                targetWord = CardPicker.pickMissionTarget(
+                    level: SharedStore.hskLevel,
+                    cards: cards,
+                    progress: progressRecords,
+                    source: vocabSource,
+                    lastKeys: lastTargetKeys
+                )
+                grammarTarget = nil
+            }
             let generated = try await service.generateMission(
                 level: SharedStore.hskLevel,
-                difficulty: SharedStore.missionDifficulty,
+                difficulty: difficulty,
                 themes: SharedStore.missionThemes,
-                knownVocabulary: knownHanziList(kind: .vocabulary),
-                knownGrammar: knownHanziList(kind: .grammar),
-                targetWord: targetWord
+                targetWord: targetWord,
+                grammarTarget: grammarTarget
             )
-            if let targetCard {
-                ProgressService.markShown(hanzi: targetCard.hanzi, in: modelContext)
+            var shown = Set<String>()
+            if let targetWord {
+                shown.insert(HanziNormalizer.normalize(targetWord.hanzi))
+                ProgressService.markShown(hanzi: targetWord.hanzi, in: modelContext)
             }
+            if let grammarTarget {
+                shown.insert(HanziNormalizer.normalize(grammarTarget.hanzi))
+                ProgressService.markShown(hanzi: grammarTarget.hanzi, in: modelContext)
+            }
+            lastTargetKeys = shown
             mission = generated
             phase = .playing
         } catch {
@@ -464,6 +569,9 @@ struct DailyMissionView: View {
                 SharedStore.recordActivity(.dailyMission)
                 energyGranted = blocker.addEnergy(minutes: Energy.dailyMissionReward)
                 ProgressService.recordMissionCompletion(hanzi: mission.hanzi, in: modelContext)
+                if mission.hasGrammarTarget {
+                    ProgressService.recordMissionCompletion(hanzi: mission.grammarHanzi, in: modelContext)
+                }
             }
             evaluation = result
             phase = .result
@@ -475,14 +583,6 @@ struct DailyMissionView: View {
 
     private func normalizedHanzi(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func knownHanziList(kind: FlashcardKind) -> [String] {
-        cards
-            .filter { $0.cardKind == kind }
-            .sorted { $0.createdAt > $1.createdAt }
-            .map { normalizedHanzi($0.hanzi) }
-            .filter { !$0.isEmpty }
     }
 
     private var targetKind: FlashcardKind {
@@ -508,16 +608,13 @@ struct DailyMissionView: View {
         return cards.first { normalizedHanzi($0.hanzi) == target && $0.cardKind == kind }
     }
 
-    private func toggleTargetWordInFlashcards() {
-        guard let mission else { return }
-        toggleWordInFlashcards(
-            MissionWord(hanzi: mission.hanzi, pinyin: mission.pinyin, english: mission.meaning),
-            kind: targetKind
-        )
-    }
-
     private func toggleWordInFlashcards(_ word: MissionWord) {
-        toggleWordInFlashcards(word, kind: .vocabulary)
+        let hanzi = normalizedHanzi(word.hanzi)
+        if let existing = cards.first(where: { normalizedHanzi($0.hanzi) == hanzi }) {
+            removeFlashcard(hanzi: hanzi, kind: existing.cardKind)
+            return
+        }
+        toggleWordInFlashcards(word, kind: HSKCatalog.bundled.preferredSavedKind(for: hanzi))
     }
 
     private func toggleWordInFlashcards(_ word: MissionWord, kind: FlashcardKind) {

@@ -14,18 +14,16 @@ struct ProfileView: View {
     @State private var pickerItem: PhotosPickerItem?
     @State private var showPhotoPicker = false
 
-    private let lastDays = 30
-
     init(profileImage: UIImage? = nil) {
         _profileImage = State(initialValue: profileImage)
     }
 
     private var dayCounts: [DayCount] {
-        ActivityHistory.counts(lastDays: lastDays)
+        ActivityHistory.countsFromFirstActivity()
     }
 
     private var totalActivities: Int {
-        dayCounts.reduce(0) { $0 + $1.count }
+        SharedStore.activityEvents.count
     }
 
     var body: some View {
@@ -132,6 +130,7 @@ struct ProfileView: View {
 
             ActivityBarChart(days: dayCounts)
                 .frame(height: 200)
+                .frame(maxWidth: .infinity)
         }
     }
 
@@ -160,12 +159,21 @@ struct ProfileView: View {
     }
 
     private var monthGridSection: some View {
-        YearContributionGrid(completedDays: ActivityHistory.completedDays())
+        YearContributionGrid(
+            completedDays: ActivityHistory.completedDays(),
+            firstActivity: ActivityHistory.firstActivityDate()
+        )
     }
 }
 
 private struct ActivityBarChart: View {
     let days: [DayCount]
+
+    private let visibleDayCount = 30
+    private let barSpacing: CGFloat = 2
+    private let yAxisWidth: CGFloat = 22
+    private let plotAxisSpacing: CGFloat = 8
+    private let labelHeight: CGFloat = 14
 
     private var maxCount: Int {
         let highest = days.map(\.count).max() ?? 0
@@ -178,51 +186,80 @@ private struct ActivityBarChart: View {
         return Array(stride(from: 0, through: maxCount, by: step))
     }
 
-    private var labeledDays: [(offset: Int, date: Date)] {
-        days.enumerated().compactMap { index, day in
-            shouldLabel(index) ? (index, day.date) : nil
+    var body: some View {
+        GeometryReader { geo in
+            let plotWidth = max(0, geo.size.width - yAxisWidth - plotAxisSpacing)
+            let barWidth = barWidth(for: plotWidth)
+            let contentWidth = contentWidth(barWidth: barWidth)
+            let plotHeight = max(0, geo.size.height - labelHeight - 10)
+
+            HStack(alignment: .top, spacing: plotAxisSpacing) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    VStack(spacing: 10) {
+                        Canvas { context, size in
+                            draw(context: context, size: size, barWidth: barWidth)
+                        }
+                        .frame(width: contentWidth, height: plotHeight)
+
+                        xLabels(barWidth: barWidth)
+                            .frame(width: contentWidth, height: labelHeight, alignment: .topLeading)
+                    }
+                    .frame(minWidth: plotWidth, alignment: .trailing)
+                }
+                .defaultScrollAnchor(.trailing)
+                .scrollBounceBehavior(.basedOnSize)
+
+                yAxis
+                    .frame(width: yAxisWidth, height: plotHeight)
+            }
         }
     }
 
-    var body: some View {
-        VStack(spacing: 10) {
-            HStack(alignment: .top, spacing: 8) {
-                Canvas { context, size in
-                    draw(context: context, size: size)
+    private var yAxis: some View {
+        VStack(alignment: .trailing, spacing: 0) {
+            ForEach(Array(yTicks.reversed()), id: \.self) { tick in
+                Text("\(tick)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                if tick != yTicks.first {
+                    Spacer(minLength: 0)
                 }
-
-                VStack(alignment: .trailing, spacing: 0) {
-                    ForEach(Array(yTicks.reversed()), id: \.self) { tick in
-                        Text("\(tick)")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                        if tick != yTicks.first {
-                            Spacer(minLength: 0)
-                        }
-                    }
-                }
-                .frame(width: 22)
             }
-            .frame(maxHeight: .infinity)
+        }
+    }
 
-            HStack {
-                ForEach(Array(labeledDays.enumerated()), id: \.offset) { index, item in
-                    Text(item.date.formatted(.dateTime.month(.abbreviated).day()))
+    private func xLabels(barWidth: CGFloat) -> some View {
+        let calendar = Calendar.current
+        return ZStack(alignment: .topLeading) {
+            ForEach(Array(days.enumerated()), id: \.offset) { index, day in
+                if shouldLabel(index, calendar: calendar) {
+                    Text(day.date.formatted(.dateTime.month(.abbreviated).day()))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .fixedSize(horizontal: true, vertical: false)
-                    if index < labeledDays.count - 1 {
-                        Spacer(minLength: 8)
-                    }
+                        .offset(x: labelOffset(index: index, barWidth: barWidth))
                 }
             }
-            .padding(.trailing, 30)
         }
     }
 
-    private func draw(context: GraphicsContext, size: CGSize) {
+    private func barWidth(for plotWidth: CGFloat) -> CGFloat {
+        let visible = min(max(days.count, 1), visibleDayCount)
+        return max(2, (plotWidth - barSpacing * CGFloat(visible - 1)) / CGFloat(visible))
+    }
+
+    private func contentWidth(barWidth: CGFloat) -> CGFloat {
+        let count = max(days.count, 1)
+        return CGFloat(count) * barWidth + barSpacing * CGFloat(count - 1)
+    }
+
+    private func labelOffset(index: Int, barWidth: CGFloat) -> CGFloat {
+        CGFloat(index) * (barWidth + barSpacing)
+    }
+
+    private func draw(context: GraphicsContext, size: CGSize, barWidth: CGFloat) {
         let calendar = Calendar.current
 
         for tick in yTicks {
@@ -237,12 +274,8 @@ private struct ActivityBarChart: View {
             )
         }
 
-        let count = max(days.count, 1)
-        let spacing: CGFloat = 2
-        let barWidth = max(2, (size.width - spacing * CGFloat(count - 1)) / CGFloat(count))
-
         for (index, day) in days.enumerated() where calendar.component(.weekday, from: day.date) == calendar.firstWeekday {
-            let x = CGFloat(index) * (barWidth + spacing) + barWidth / 2
+            let x = CGFloat(index) * (barWidth + barSpacing) + barWidth / 2
             var line = Path()
             line.move(to: CGPoint(x: x, y: 0))
             line.addLine(to: CGPoint(x: x, y: size.height))
@@ -255,7 +288,7 @@ private struct ActivityBarChart: View {
 
         for (index, day) in days.enumerated() where day.count > 0 {
             let height = max(3, size.height * CGFloat(day.count) / CGFloat(maxCount))
-            let x = CGFloat(index) * (barWidth + spacing)
+            let x = CGFloat(index) * (barWidth + barSpacing)
             let rect = CGRect(x: x, y: size.height - height, width: barWidth, height: height)
             context.fill(
                 Path(roundedRect: rect, cornerRadius: barWidth / 2, style: .continuous),
@@ -264,14 +297,20 @@ private struct ActivityBarChart: View {
         }
     }
 
-    private func shouldLabel(_ index: Int) -> Bool {
-        guard days.count > 1 else { return true }
-        return [0, days.count / 3, (days.count * 2) / 3, days.count - 1].contains(index)
+    private func shouldLabel(_ index: Int, calendar: Calendar) -> Bool {
+        guard days.indices.contains(index) else { return false }
+        if days.count <= 1 { return true }
+        if days.count <= visibleDayCount {
+            return [0, days.count / 3, (days.count * 2) / 3, days.count - 1].contains(index)
+        }
+        if index == 0 || index == days.count - 1 { return true }
+        return calendar.component(.day, from: days[index].date) == 1
     }
 }
 
 private struct YearContributionGrid: View {
     let completedDays: Set<Date>
+    var firstActivity: Date?
 
     private let calendar = Calendar.current
     private let dotSize: CGFloat = 11
@@ -279,7 +318,8 @@ private struct YearContributionGrid: View {
     private let weekdayGutter: CGFloat = 16
 
     var body: some View {
-        let layout = YearRemainderLayout(now: Date(), calendar: calendar)
+        let now = Date()
+        let layout = ContributionGridLayout(firstActivity: firstActivity, now: now, calendar: calendar)
 
         HStack(alignment: .top, spacing: 6) {
             VStack(spacing: spacing) {
@@ -291,38 +331,43 @@ private struct YearContributionGrid: View {
                 }
             }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: spacing) {
-                    ForEach(0..<7, id: \.self) { row in
-                        HStack(spacing: spacing) {
-                            ForEach(0..<layout.columns, id: \.self) { column in
-                                let date = layout.date(column: column, row: row)
-                                Circle()
-                                    .fill(fill(for: date))
-                                    .frame(width: dotSize, height: dotSize)
-                                    .accessibilityLabel(date.map(accessibilityLabel(for:)) ?? "Empty")
-                                    .accessibilityHidden(date == nil)
-                            }
-                        }
-                    }
-
-                    HStack(spacing: spacing) {
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: spacing) {
                         ForEach(0..<layout.columns, id: \.self) { column in
-                            Color.clear
-                                .frame(width: dotSize, height: 14)
-                                .overlay(alignment: .leading) {
-                                    if let label = layout.monthLabel(for: column) {
-                                        Text(label)
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                            .fixedSize()
-                                    }
+                            VStack(spacing: spacing) {
+                                ForEach(0..<7, id: \.self) { row in
+                                    let date = layout.date(column: column, row: row)
+                                    Circle()
+                                        .fill(fill(for: date))
+                                        .frame(width: dotSize, height: dotSize)
+                                        .accessibilityLabel(date.map(accessibilityLabel(for:)) ?? "Empty")
+                                        .accessibilityHidden(date == nil)
                                 }
+
+                                Color.clear
+                                    .frame(width: dotSize, height: 14)
+                                    .overlay(alignment: .leading) {
+                                        if let label = layout.monthLabel(for: column) {
+                                            Text(label)
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                                .fixedSize()
+                                        }
+                                    }
+                            }
+                            .id(column)
                         }
                     }
                 }
+                .scrollBounceBehavior(.basedOnSize)
+                .onAppear {
+                    let monthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: now))
+                    if let monthStart, let column = layout.column(containing: monthStart) {
+                        proxy.scrollTo(column, anchor: .leading)
+                    }
+                }
             }
-            .scrollBounceBehavior(.basedOnSize)
         }
         .accessibilityElement(children: .contain)
     }
@@ -348,21 +393,37 @@ private struct YearContributionGrid: View {
     }
 }
 
-private struct YearRemainderLayout {
+struct ContributionGridLayout {
     let start: Date
     let dayCount: Int
     let leadingEmpty: Int
     let columns: Int
     let calendar: Calendar
+    let nowYear: Int
 
-    init(now: Date, calendar: Calendar) {
+    init(firstActivity: Date?, now: Date, calendar: Calendar) {
         self.calendar = calendar
-        var components = calendar.dateComponents([.year, .month], from: now)
-        start = calendar.date(from: components) ?? calendar.startOfDay(for: now)
-        components.month = 12
-        components.day = 31
-        let end = calendar.startOfDay(for: calendar.date(from: components) ?? start)
-        dayCount = (calendar.dateComponents([.day], from: start, to: end).day ?? 0) + 1
+        nowYear = calendar.component(.year, from: now)
+        var endComponents = calendar.dateComponents([.year], from: now)
+        endComponents.month = 12
+        endComponents.day = 31
+        let end = calendar.startOfDay(for: calendar.date(from: endComponents) ?? now)
+
+        let origin = firstActivity.map { min($0, now) }
+        var startComponents: DateComponents
+        if let origin {
+            startComponents = DateComponents(year: calendar.component(.year, from: origin), month: 1, day: 1)
+        } else {
+            startComponents = calendar.dateComponents([.year, .month], from: now)
+        }
+        var monthStart = calendar.date(from: startComponents) ?? calendar.startOfDay(for: origin ?? now)
+        if monthStart > end {
+            startComponents = calendar.dateComponents([.year, .month], from: now)
+            monthStart = calendar.date(from: startComponents) ?? calendar.startOfDay(for: now)
+        }
+
+        start = monthStart
+        dayCount = max(1, (calendar.dateComponents([.day], from: start, to: end).day ?? 0) + 1)
         let weekday = calendar.component(.weekday, from: start)
         leadingEmpty = (weekday - calendar.firstWeekday + 7) % 7
         columns = Int(ceil(Double(leadingEmpty + dayCount) / 7.0))
@@ -374,11 +435,25 @@ private struct YearRemainderLayout {
         return calendar.date(byAdding: .day, value: offset, to: start)
     }
 
+    func column(containing date: Date) -> Int? {
+        let day = calendar.startOfDay(for: date)
+        let offset = calendar.dateComponents([.day], from: start, to: day).day ?? 0
+        guard offset >= 0, offset < dayCount else { return nil }
+        return (offset + leadingEmpty) / 7
+    }
+
     func monthLabel(for column: Int) -> String? {
         for row in 0..<7 {
-            if let date = date(column: column, row: row), calendar.component(.day, from: date) == 1 {
-                return date.formatted(.dateTime.month(.abbreviated))
+            guard let date = date(column: column, row: row), calendar.component(.day, from: date) == 1 else {
+                continue
             }
+            let year = calendar.component(.year, from: date)
+            let month = calendar.component(.month, from: date)
+            let startYear = calendar.component(.year, from: start)
+            if year != nowYear || (month == 1 && startYear != nowYear) {
+                return date.formatted(.dateTime.month(.abbreviated).year())
+            }
+            return date.formatted(.dateTime.month(.abbreviated))
         }
         return nil
     }

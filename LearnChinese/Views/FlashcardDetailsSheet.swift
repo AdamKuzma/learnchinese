@@ -5,6 +5,7 @@
 
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct FlashcardDetailsSheet: View {
     @Environment(\.modelContext) private var context
@@ -17,6 +18,7 @@ struct FlashcardDetailsSheet: View {
     @State private var isGeneratingSentences = false
     @State private var errorMessage: String?
     @State private var savedVocabularyHanzi: Set<String> = []
+    @State private var showEdit = false
 
     private let service = OpenAIFlashcardDetailsService.shared
 
@@ -24,7 +26,7 @@ struct FlashcardDetailsSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    AppLabeledBlock(title: "Word") {
+                    AppLabeledBlock(title: card.cardKind == .grammar ? "Grammar" : "Word") {
                         wordCard
                     }
 
@@ -74,6 +76,12 @@ struct FlashcardDetailsSheet: View {
             .task {
                 await generateMissingDetails()
             }
+            .sheet(isPresented: $showEdit) {
+                NavigationStack {
+                    AddCardView(kind: card.cardKind, card: card)
+                }
+                .appScreenBackground()
+            }
         }
     }
 
@@ -82,6 +90,39 @@ struct FlashcardDetailsSheet: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(card.hanzi)
                     .font(.largeTitle.weight(.semibold))
+                    .foregroundStyle(Color.appForeground)
+                    .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .contextMenu {
+                        Button {
+                            UIPasteboard.general.string = card.hanzi
+                        } label: {
+                            Label("Copy", systemImage: "doc.on.doc")
+                        }
+                        Button {
+                            showEdit = true
+                        } label: {
+                            Label("Edit", systemImage: "pencil")
+                        }
+                        Button {
+                            moveCardKind()
+                        } label: {
+                            Label(
+                                card.cardKind == .grammar ? "Move to Vocabulary" : "Move to Grammar",
+                                systemImage: "arrow.left.arrow.right"
+                            )
+                        }
+                    } preview: {
+                        Text(card.hanzi)
+                            .font(.largeTitle.weight(.semibold))
+                            .foregroundStyle(Color.appForeground)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 16)
+                            .background(
+                                Color.appSecondaryBackground,
+                                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            )
+                    }
+                    .tint(Color.appForeground)
                 if !card.pinyin.isEmpty {
                     Text(card.pinyin)
                         .foregroundStyle(.secondary)
@@ -311,6 +352,11 @@ struct FlashcardDetailsSheet: View {
                 .map { $0.hanzi.trimmingCharacters(in: .whitespacesAndNewlines) }
         )
         return fromStore.union(savedVocabularyHanzi)
+    }
+
+    private func moveCardKind() {
+        card.cardKind = card.cardKind == .grammar ? .vocabulary : .grammar
+        try? context.save()
     }
 
     private func normalizedHanzi(_ value: String) -> String {

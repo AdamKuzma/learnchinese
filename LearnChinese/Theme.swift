@@ -56,7 +56,9 @@ extension Color {
         if traits.userInterfaceStyle == .dark {
             return UIColor(red: 0x14 / 255, green: 0x14 / 255, blue: 0x14 / 255, alpha: 1)
         }
-        return .systemGroupedBackground
+        // Neutral gray instead of systemGroupedBackground (#F2F2F7), whose blue
+        // undertone gets amplified by the context-menu blur and reads as blue.
+        return UIColor(red: 0xF2 / 255, green: 0xF2 / 255, blue: 0xF2 / 255, alpha: 1)
     })
 
     static let appSecondaryBackground = Color(uiColor: UIColor { traits in

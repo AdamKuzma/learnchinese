@@ -22,6 +22,9 @@ actor OpenAIFlashcardDetailsService {
     private let model = "gpt-4o-mini"
     private let urlSession: URLSession
     private let apiKeyProvider: @Sendable () -> String?
+    private var unusedScenesByTheme: [MissionTheme: [String]] = [:]
+    private var unusedSituationShapes: [String] = []
+    private var unusedTaskShapes: [String] = []
 
     init(
         urlSession: URLSession = .shared,
@@ -172,24 +175,42 @@ actor OpenAIFlashcardDetailsService {
         themes: Set<MissionTheme>,
         knownVocabulary: [String] = [],
         knownGrammar: [String] = [],
-        targetWord: DailyMissionTargetWord? = nil
+        targetWord: DailyMissionTargetWord? = nil,
+        grammarTarget: DailyMissionTargetWord? = nil
     ) async throws -> DailyMission {
         let hskLevel = min(max(level, HSKRange.levels.lowerBound), HSKRange.levels.upperBound)
         let selectedThemes = themes.isEmpty ? Set(MissionTheme.allCases) : themes
         let theme = selectedThemes.randomElement() ?? .everydayLife
-        let focus = targetWord?.focus ?? MissionFocus.allCases.randomElement() ?? .vocabulary
+        let scene = nextScene(for: theme)
+        let situationShape = nextFromBag(MissionPromptVariety.situationShapes, remaining: &unusedSituationShapes)
+        let taskShape = nextFromBag(MissionPromptVariety.taskShapes, remaining: &unusedTaskShapes)
+        let dualTarget = targetWord != nil && grammarTarget != nil
+        let focus = dualTarget ? .vocabulary : (targetWord?.focus ?? MissionFocus.allCases.randomElement() ?? .vocabulary)
         let knownTargets = Self.dedupedKnownItems(
             focus == .grammar ? knownGrammar : knownVocabulary
         )
         let targetKind = focus == .grammar ? "grammar phrase or pattern" : "word"
+        let grammarJSONKeys = dualTarget
+            ? """
+            grammarHanzi: the required grammar pattern in simplified Chinese
+            grammarPinyin: pinyin with tone marks for grammarHanzi
+            grammarMeaning: a short English explanation of how the pattern is used
+            """
+            : ""
         let prompt = """
         Create one Daily Mission for a Mandarin learner.
         HSK level: \(hskLevel)
         Difficulty: \(difficulty.title)
         Theme: \(theme.title)
-        Target type: \(focus == .grammar ? "grammar" : "vocabulary")
+        Target type: \(dualTarget ? "vocabulary and grammar" : (focus == .grammar ? "grammar" : "vocabulary"))
 
-        \(Self.targetGuidance(for: hskLevel, focus: focus, targetWord: targetWord, knownTargets: knownTargets))
+        \(Self.targetGuidance(
+            for: hskLevel,
+            focus: focus,
+            targetWord: targetWord,
+            grammarTarget: dualTarget ? grammarTarget : nil,
+            knownTargets: knownTargets
+        ))
 
         Raise or lower complexity only through the situation and the writing task, never by swapping in easier or harder HSK vocabulary.
 
@@ -199,24 +220,45 @@ actor OpenAIFlashcardDetailsService {
         Theme guidance:
         \(theme.promptGuidance)
 
-        Make the situation specific and interesting: name a place, people, and what just happened. Avoid generic textbook scenes.
+        Required scene for THIS mission (do not replace it):
+        \(scene)
+
+        Situation format for THIS mission (follow this shape; do not fall back to a named-person story):
+        \(situationShape)
+
+        Task format for THIS mission:
+        \(taskShape)
+
+        Use the scene as the setting. Do not force a third-person narrative with named characters.
+        HSK textbooks mix notices, dialogues, messages, questions, and direct address — match that variety.
+        Do not default to Beijing or Shanghai, and do not start the Chinese with 在北京, 在上海, or 在这个城市, unless this scene is actually there.
+        Do not reuse stock textbook names (小明, 小红, 小李, 李老师, 王经理) or the frame "in this city, X happens."
+        Roles like 服务员, 司机, 同学 are fine. Invented names only if this format truly needs one, and vary them.
+        Proper nouns needed for this scene and common location words (车站, 机场, 酒店, 餐厅, and similar) are allowed even if they are not on the HSK list.
+        Do not always open the task with 请你说 or 请告诉.
 
         Return JSON with exactly these string keys:
         focus: "\(focus.rawValue)"
         hanzi: the target \(targetKind) in simplified Chinese
         pinyin: pinyin with tone marks
         meaning: \(focus == .grammar ? "a short English explanation of how the pattern is used" : "short English meaning")
+        \(grammarJSONKeys)
         situationChinese: the situation in simplified Chinese
         situationPinyin: pinyin with tone marks for situationChinese
         situationEnglish: English translation of situationChinese
-        taskChinese: the writing task in simplified Chinese using the target
+        taskChinese: the writing task in simplified Chinese\(dualTarget ? " that requires using both the target word and the target grammar pattern" : " using the target")
         taskPinyin: pinyin with tone marks for taskChinese
         taskEnglish: English translation of taskChinese
         """
 
-        let systemPrompt = targetWord == nil
-            ? "You are a concise Mandarin tutor. Return only valid JSON with all requested string keys present. Obey the HSK vocabulary and target-type rules exactly. Prefer targets the learner has not already saved."
-            : "You are a concise Mandarin tutor. Return only valid JSON with all requested string keys present. Use the required target exactly. Do not replace it with a different word or pattern."
+        let systemPrompt: String
+        if dualTarget {
+            systemPrompt = "You are a concise Mandarin tutor. Return only valid JSON with all requested string keys present. Use both required targets exactly. The task must require the learner to use both in one reply. Do not replace either target. Vary situation and task form; never copy a stock 在… / 小明 / 请你说 template."
+        } else if targetWord == nil {
+            systemPrompt = "You are a concise Mandarin tutor. Return only valid JSON with all requested string keys present. Obey the HSK vocabulary and target-type rules exactly. Prefer targets the learner has not already saved. Vary situation and task form; never copy a stock 在… / 小明 / 请你说 template."
+        } else {
+            systemPrompt = "You are a concise Mandarin tutor. Return only valid JSON with all requested string keys present. Use the required target exactly. Do not replace it with a different word or pattern. Vary situation and task form; never copy a stock 在… / 小明 / 请你说 template."
+        }
 
         var mission: DailyMission = try await completeJSON(
             prompt: prompt,
@@ -240,13 +282,32 @@ actor OpenAIFlashcardDetailsService {
         }
 
         if let targetWord {
-            mission.hanzi = targetWord.hanzi
-            mission.pinyin = targetWord.pinyin
-            mission.meaning = targetWord.meaning
-            mission.focus = targetWord.focus
+            Self.apply(targetWord, to: &mission, asGrammar: false)
+        }
+        if dualTarget, let grammarTarget {
+            Self.apply(grammarTarget, to: &mission, asGrammar: true)
+        } else {
+            mission.grammarHanzi = ""
+            mission.grammarPinyin = ""
+            mission.grammarMeaning = ""
         }
 
         return mission
+    }
+
+    private func nextScene(for theme: MissionTheme) -> String {
+        var remaining = unusedScenesByTheme[theme] ?? []
+        let scene = nextFromBag(theme.sceneBank, remaining: &remaining, fallback: theme.title)
+        unusedScenesByTheme[theme] = remaining
+        return scene
+    }
+
+    private func nextFromBag(_ bank: [String], remaining: inout [String], fallback: String = "") -> String {
+        if remaining.isEmpty {
+            remaining = bank.shuffled()
+        }
+        guard !remaining.isEmpty else { return fallback }
+        return remaining.removeFirst()
     }
 
     private static let knownItemsLimit = 120
@@ -279,19 +340,67 @@ actor OpenAIFlashcardDetailsService {
         """
     }
 
+    private static func apply(
+        _ target: DailyMissionTargetWord,
+        to mission: inout DailyMission,
+        asGrammar: Bool
+    ) {
+        let pinyin = target.pinyin.trimmingCharacters(in: .whitespacesAndNewlines)
+        let meaning = target.meaning.trimmingCharacters(in: .whitespacesAndNewlines)
+        if asGrammar {
+            mission.grammarHanzi = target.hanzi
+            if !pinyin.isEmpty {
+                mission.grammarPinyin = pinyin
+            }
+            if !meaning.isEmpty {
+                mission.grammarMeaning = meaning
+            }
+        } else {
+            mission.hanzi = target.hanzi
+            mission.focus = target.focus
+            if !pinyin.isEmpty {
+                mission.pinyin = pinyin
+            }
+            if !meaning.isEmpty {
+                mission.meaning = meaning
+            }
+        }
+    }
+
+    private static func targetLine(for target: DailyMissionTargetWord, kind: String, focus: MissionFocus) -> String {
+        let pinyin = target.pinyin.trimmingCharacters(in: .whitespacesAndNewlines)
+        let meaning = target.meaning.trimmingCharacters(in: .whitespacesAndNewlines)
+        return """
+        Required target \(kind) — use this exact target. Do not pick a different \(kind).
+        hanzi: \(target.hanzi)
+        pinyin: \(pinyin.isEmpty ? "pinyin with tone marks" : pinyin)
+        meaning: \(meaning.isEmpty ? (focus == .grammar ? "a short English explanation of how the pattern is used" : "a short English gloss") : meaning)
+        """
+    }
+
     private static func targetGuidance(
         for level: Int,
         focus: MissionFocus,
         targetWord: DailyMissionTargetWord?,
+        grammarTarget: DailyMissionTargetWord?,
         knownTargets: [String]
     ) -> String {
+        if let targetWord, let grammarTarget {
+            return """
+            \(targetLine(for: targetWord, kind: "word", focus: .vocabulary))
+
+            \(targetLine(for: grammarTarget, kind: "grammar phrase or pattern", focus: .grammar))
+
+            Write the situation and task around both targets.
+            The writing task must require using both in the same reply. Do not make a task that can be completed with only one of them.
+            Situation and task Chinese should stay around HSK \(level) complexity. Both required targets must still be used even if they are not from that HSK list.
+            """
+        }
+
         if let targetWord {
             let kind = focus == .grammar ? "grammar phrase or pattern" : "word"
             return """
-            Required target \(kind) — use this exact target. Do not pick a different \(kind).
-            hanzi: \(targetWord.hanzi)
-            pinyin: \(targetWord.pinyin)
-            meaning: \(targetWord.meaning)
+            \(targetLine(for: targetWord, kind: kind, focus: focus))
 
             Write the situation and task around this target.
             Situation and task Chinese should stay around HSK \(level) complexity. The required target itself must still be used even if it is not from that HSK list.
@@ -390,13 +499,26 @@ actor OpenAIFlashcardDetailsService {
     }
 
     func evaluate(mission: DailyMission, userChinese: String) async throws -> DailyMissionEvaluation {
+        let grammarTargetNote: String
+        if mission.hasGrammarTarget {
+            grammarTargetNote = """
+            Target grammar pattern: \(mission.grammarHanzi)
+            Grammar pinyin: \(mission.grammarPinyin)
+            Grammar meaning: \(mission.grammarMeaning)
+            targetGrammarUsedCorrectly is true if this grammar pattern is used with the right meaning, even if the rest of the sentence is imperfect.
+            """
+        } else {
+            grammarTargetNote = "targetGrammarUsedCorrectly: true"
+        }
+
         let prompt = """
         Score this Mandarin learner's reply to a Daily Mission.
 
-        Target type: \(mission.focus == .grammar ? "grammar pattern" : "vocabulary word")
+        Target type: \(mission.hasGrammarTarget ? "vocabulary word and grammar pattern" : (mission.focus == .grammar ? "grammar pattern" : "vocabulary word"))
         Target: \(mission.hanzi)
         Pinyin: \(mission.pinyin)
         Meaning: \(mission.meaning)
+        \(grammarTargetNote)
         Situation (Chinese): \(mission.situationChinese)
         Situation (English): \(mission.situationEnglish)
         Task (Chinese): \(mission.taskChinese)
@@ -410,7 +532,8 @@ actor OpenAIFlashcardDetailsService {
         - 3: understandable but has a real grammar or word-choice problem.
         - 1–2: wrong meaning, unintelligible, or the task was not done.
         - Do not drop grammar or naturalness below 4 only because the sentence could be a bit more native.
-        - targetWordUsedCorrectly is true if the target \(mission.focus == .grammar ? "grammar pattern" : "word") appears and is used with the right meaning, even if the rest of the sentence is imperfect.
+        - targetWordUsedCorrectly is true if the target \(mission.focus == .grammar ? "grammar pattern" : "word") "\(mission.hanzi)" appears and is used with the right meaning, even if the rest of the sentence is imperfect.
+        \(mission.hasGrammarTarget ? "- Both targets are required for success. Missing either one fails the target checks." : "")
 
         Feedback: 1–2 short English sentences. Praise what worked. Mention only real issues. Do not treat missing 吧 / 了 / tone-softening as a failure.
 
@@ -421,6 +544,7 @@ actor OpenAIFlashcardDetailsService {
         grammar: integer 1-5
         naturalness: integer 1-5
         targetWordUsedCorrectly: boolean
+        targetGrammarUsedCorrectly: boolean
         feedback: short English feedback (2 sentences max)
         naturalChinese: one more-natural Chinese version of their reply
         """
@@ -435,13 +559,15 @@ actor OpenAIFlashcardDetailsService {
         let grammar = response.grammar.clamped(to: 1...5)
         let naturalness = response.naturalness.clamped(to: 1...5)
         let usedWord = response.targetWordUsedCorrectly
+        let usedGrammar = mission.hasGrammarTarget ? (response.targetGrammarUsedCorrectly ?? false) : true
 
         return DailyMissionEvaluation(
-            success: usedWord && meaning >= 3,
+            success: usedWord && usedGrammar && meaning >= 3,
             meaning: meaning,
             grammar: grammar,
             naturalness: naturalness,
             targetWordUsedCorrectly: usedWord,
+            targetGrammarUsedCorrectly: usedGrammar,
             feedback: response.feedback,
             naturalChinese: response.naturalChinese
         )
@@ -645,6 +771,7 @@ private struct EvaluationResponse: Decodable {
     let grammar: Int
     let naturalness: Int
     let targetWordUsedCorrectly: Bool
+    let targetGrammarUsedCorrectly: Bool?
     let feedback: String
     let naturalChinese: String
 }

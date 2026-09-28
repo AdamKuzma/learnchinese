@@ -22,13 +22,57 @@ struct DayCount: Identifiable, Sendable {
 }
 
 enum ActivityHistory {
-    static func counts(lastDays: Int, ending now: Date = .now, calendar: Calendar = .current) -> [DayCount] {
+    static func firstActivityDate(
+        events: [ActivityEvent] = SharedStore.activityEvents
+    ) -> Date? {
+        events.map(\.date).min()
+    }
+
+    static func counts(
+        lastDays: Int,
+        ending now: Date = .now,
+        calendar: Calendar = .current,
+        events: [ActivityEvent] = SharedStore.activityEvents
+    ) -> [DayCount] {
         let today = calendar.startOfDay(for: now)
-        let events = SharedStore.activityEvents
-        return (0..<lastDays).reversed().map { offset in
-            let day = calendar.date(byAdding: .day, value: -offset, to: today) ?? today
-            let count = events.filter { calendar.isDate($0.date, inSameDayAs: day) }.count
-            return DayCount(date: day, count: count)
+        let start = calendar.date(byAdding: .day, value: -(lastDays - 1), to: today) ?? today
+        return counts(from: start, through: today, calendar: calendar, events: events)
+    }
+
+    static func countsFromFirstActivity(
+        through now: Date = .now,
+        calendar: Calendar = .current,
+        events: [ActivityEvent] = SharedStore.activityEvents,
+        emptyFallbackDays: Int = 30
+    ) -> [DayCount] {
+        guard let first = firstActivityDate(events: events) else {
+            return counts(lastDays: emptyFallbackDays, ending: now, calendar: calendar, events: events)
+        }
+        return counts(from: first, through: now, calendar: calendar, events: events)
+    }
+
+    static func counts(
+        from start: Date,
+        through end: Date,
+        calendar: Calendar = .current,
+        events: [ActivityEvent] = SharedStore.activityEvents
+    ) -> [DayCount] {
+        let first = calendar.startOfDay(for: start)
+        let last = calendar.startOfDay(for: end)
+        guard first <= last else { return [] }
+
+        var buckets: [Date: Int] = [:]
+        buckets.reserveCapacity(events.count)
+        for event in events {
+            let day = calendar.startOfDay(for: event.date)
+            guard day >= first, day <= last else { continue }
+            buckets[day, default: 0] += 1
+        }
+
+        let dayCount = (calendar.dateComponents([.day], from: first, to: last).day ?? 0) + 1
+        return (0..<dayCount).compactMap { offset in
+            guard let day = calendar.date(byAdding: .day, value: offset, to: first) else { return nil }
+            return DayCount(date: day, count: buckets[day] ?? 0)
         }
     }
 

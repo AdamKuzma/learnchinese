@@ -12,29 +12,25 @@ struct TappableChineseSentence: View {
     @State private var presentedIndex: Int?
     @State private var highlightedIndex: Int?
 
-    private var layoutItems: [ChineseSentenceLayoutItem] {
-        ChineseSentenceLayout.items(from: words)
-    }
-
     var body: some View {
         FlowLayout(spacing: 0, lineSpacing: lineSpacing) {
-            ForEach(Array(layoutItems.enumerated()), id: \.offset) { index, item in
-                wordView(item, index: index)
+            ForEach(Array(words.enumerated()), id: \.offset) { index, word in
+                wordView(word, index: index)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
-    private func wordView(_ item: ChineseSentenceLayoutItem, index: Int) -> some View {
+    private func wordView(_ word: MissionWord, index: Int) -> some View {
         let isSelected = highlightedIndex == index
 
-        if item.word.isTappable {
+        if word.isTappable {
             Button {
                 highlightedIndex = index
                 presentedIndex = index
             } label: {
-                Text(item.displayHanzi)
+                Text(word.hanzi)
                     .font(font)
                     .padding(.horizontal, 1)
                     .padding(.vertical, wordVerticalPadding)
@@ -48,7 +44,7 @@ struct TappableChineseSentence: View {
             .accessibilityHint("Shows pinyin and translation")
             .popover(isPresented: isPresented(index), arrowEdge: .bottom) {
                 WordLookupPopover(
-                    word: item.word,
+                    word: word,
                     savedHanzi: savedHanzi,
                     onToggle: onToggle
                 )
@@ -61,7 +57,7 @@ struct TappableChineseSentence: View {
                 }
             }
         } else {
-            Text(item.displayHanzi)
+            Text(word.hanzi)
                 .font(font)
         }
     }
@@ -91,6 +87,17 @@ struct WordLookupPopover: View {
     private var isSaved: Bool {
         savedHanzi.contains(details.hanzi.trimmingCharacters(in: .whitespacesAndNewlines))
             || savedHanzi.contains(word.hanzi.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    private var saveKind: FlashcardKind {
+        HSKCatalog.bundled.preferredSavedKind(for: details.hanzi)
+    }
+
+    private var saveAccessibilityLabel: String {
+        if isSaved {
+            return saveKind == .grammar ? "Remove from Grammar" : "Remove from Vocabulary"
+        }
+        return saveKind == .grammar ? "Add to Grammar" : "Add to Vocabulary"
     }
 
     init(word: MissionWord, savedHanzi: Set<String>, onToggle: @escaping (MissionWord) -> Void) {
@@ -141,7 +148,7 @@ struct WordLookupPopover: View {
                 }
                 .font(.title2)
                 .disabled(isLoading || !details.hasDetails)
-                .accessibilityLabel(isSaved ? "Remove from Vocabulary" : "Add to Vocabulary")
+                .accessibilityLabel(saveAccessibilityLabel)
             }
         }
         .padding(14)
@@ -204,85 +211,6 @@ struct PopoverWillDismissObserver: UIViewControllerRepresentable {
             return false
         }
     }
-}
-
-struct ChineseSentenceLayoutItem: Equatable {
-    var word: MissionWord
-    var displayHanzi: String
-}
-
-enum ChineseSentenceLayout {
-    static func items(from words: [MissionWord]) -> [ChineseSentenceLayoutItem] {
-        var items: [ChineseSentenceLayoutItem] = []
-        var pendingOpen = ""
-
-        for word in words {
-            switch word.lineBreakRole {
-            case .openingPunctuation:
-                pendingOpen += word.hanzi
-            case .closingPunctuation:
-                if var last = items.last {
-                    last.displayHanzi += word.hanzi
-                    items[items.count - 1] = last
-                } else {
-                    items.append(
-                        ChineseSentenceLayoutItem(word: word, displayHanzi: pendingOpen + word.hanzi)
-                    )
-                    pendingOpen = ""
-                }
-            case .content:
-                items.append(
-                    ChineseSentenceLayoutItem(word: word, displayHanzi: pendingOpen + word.hanzi)
-                )
-                pendingOpen = ""
-            }
-        }
-
-        if !pendingOpen.isEmpty {
-            if var last = items.last {
-                last.displayHanzi += pendingOpen
-                items[items.count - 1] = last
-            } else {
-                items.append(
-                    ChineseSentenceLayoutItem(
-                        word: MissionWord(hanzi: pendingOpen, pinyin: "", english: ""),
-                        displayHanzi: pendingOpen
-                    )
-                )
-            }
-        }
-
-        return items
-    }
-}
-
-private extension MissionWord {
-    enum LineBreakRole {
-        case openingPunctuation
-        case closingPunctuation
-        case content
-    }
-
-    var lineBreakRole: LineBreakRole {
-        let scalars = hanzi.unicodeScalars.filter { !CharacterSet.whitespacesAndNewlines.contains($0) }
-        guard !scalars.isEmpty else { return .closingPunctuation }
-        if scalars.allSatisfy({ CJKLineBreaking.cannotEndLine.contains($0) }) {
-            return .openingPunctuation
-        }
-        if scalars.allSatisfy({ CJKLineBreaking.cannotStartLine.contains($0) }) {
-            return .closingPunctuation
-        }
-        let punctuation = CharacterSet.punctuationCharacters.union(.symbols)
-        if scalars.allSatisfy({ punctuation.contains($0) }) {
-            return .closingPunctuation
-        }
-        return .content
-    }
-}
-
-private enum CJKLineBreaking {
-    static let cannotStartLine = CharacterSet(charactersIn: "。．.！!？?，,、；;：:）》」』】〉›»’”…—～%、‰")
-    static let cannotEndLine = CharacterSet(charactersIn: "（《「『【〈‹«‘“")
 }
 
 struct FlowLayout: Layout {

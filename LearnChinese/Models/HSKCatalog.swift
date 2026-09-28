@@ -48,6 +48,7 @@ struct HSKCatalog: Sendable {
     private let grammarByToken: [String: [HSKGrammarPoint]]
     private let vocabByLevel: [Int: [HSKVocabWord]]
     private let grammarByLevel: [Int: [HSKGrammarPoint]]
+    private let grammarOnlyTargets: Set<String>
 
     init(
         vocab: [HSKVocabWord],
@@ -88,6 +89,18 @@ struct HSKCatalog: Sendable {
         self.grammarByToken = grammarIndex
         self.vocabByLevel = vocabLevels
         self.grammarByLevel = grammarLevels
+
+        var grammarOnly: Set<String> = []
+        for point in grammar {
+            for phrase in point.missionTargetPhrases {
+                let keys = HanziNormalizer.lookupKeys(for: phrase)
+                guard keys.contains(where: { vocabIndex[$0] != nil }) == false else { continue }
+                for key in keys where !key.isEmpty {
+                    grammarOnly.insert(key)
+                }
+            }
+        }
+        self.grammarOnlyTargets = grammarOnly
     }
 
     static func load(from bundle: Bundle) -> HSKCatalog? {
@@ -155,6 +168,42 @@ struct HSKCatalog: Sendable {
 
     func isCustom(hanzi: String) -> Bool {
         vocab(for: hanzi) == nil && grammarPoints(for: hanzi).isEmpty
+    }
+
+    /// Grammar-only HSK targets. Words that also appear in the vocab list stay vocabulary.
+    func preferredSavedKind(for hanzi: String) -> FlashcardKind {
+        let keys = HanziNormalizer.lookupKeys(for: hanzi)
+        if keys.contains(where: { grammarOnlyTargets.contains($0) }) {
+            return .grammar
+        }
+        return .vocabulary
+    }
+}
+
+extension HSKGrammarPoint {
+    var missionTargetPhrases: [String] {
+        var seen = Set<String>()
+        var phrases: [String] = []
+        let parts = pattern
+            .split(separator: "、", omittingEmptySubsequences: true)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        for piece in parts + matchTokens {
+            let normalized = HanziNormalizer.normalize(piece)
+            guard Self.isMissionTargetPhrase(normalized), seen.insert(normalized).inserted else { continue }
+            phrases.append(normalized)
+        }
+        return phrases
+    }
+
+    private static func isMissionTargetPhrase(_ value: String) -> Bool {
+        guard (1...8).contains(value.count) else { return false }
+        guard value.contains(where: \.isCJK) else { return false }
+        if value.contains(where: { $0.isASCII && $0.isLetter }) { return false }
+        if value.contains("…") || value.contains("...") || value.contains("—") || value.contains("－") {
+            return false
+        }
+        if value.contains("（") || value.contains("(") { return false }
+        return true
     }
 }
 

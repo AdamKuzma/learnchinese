@@ -35,17 +35,40 @@ enum ProgressService {
     }
 
     @discardableResult
-    static func recordLessonConfirmation(hanzi: String, in context: ModelContext) -> ItemProgress {
+    static func recordLessonConfirmation(
+        hanzi: String,
+        in context: ModelContext,
+        at date: Date = .now,
+        calendar: Calendar = .current
+    ) -> ItemProgress {
         let record = progress(for: hanzi, in: context)
         record.lessonConfirmations += 1
+        recordSuccessfulActivity(on: record, kind: .recall, at: date, calendar: calendar)
         try? context.save()
         return record
     }
 
     @discardableResult
-    static func recordMissionCompletion(hanzi: String, in context: ModelContext) -> ItemProgress {
+    static func recordLessonMiss(
+        hanzi: String,
+        in context: ModelContext
+    ) -> ItemProgress {
+        let record = progress(for: hanzi, in: context)
+        record.lessonConfirmations = max(0, record.lessonConfirmations - 1)
+        try? context.save()
+        return record
+    }
+
+    @discardableResult
+    static func recordMissionCompletion(
+        hanzi: String,
+        in context: ModelContext,
+        at date: Date = .now,
+        calendar: Calendar = .current
+    ) -> ItemProgress {
         let record = progress(for: hanzi, in: context)
         record.dailyMissionCompletions += 1
+        recordSuccessfulActivity(on: record, kind: .mission, at: date, calendar: calendar)
         try? context.save()
         return record
     }
@@ -180,5 +203,40 @@ enum ProgressService {
             lessonConfirmations: record?.lessonConfirmations ?? 0,
             dailyMissionCompletions: record?.dailyMissionCompletions ?? 0
         )
+    }
+
+    private enum StarActivityKind {
+        case recall
+        case mission
+    }
+
+    private static func recordSuccessfulActivity(
+        on record: ItemProgress,
+        kind: StarActivityKind,
+        at date: Date,
+        calendar: Calendar
+    ) {
+        let key = DayKeyStore.key(for: date, calendar: calendar)
+        switch kind {
+        case .recall:
+            var days = record.recallDayKeys
+            days.insert(key)
+            record.recallDayKeys = days
+        case .mission:
+            var days = record.missionDayKeys
+            days.insert(key)
+            record.missionDayKeys = days
+        }
+
+        if let first = record.firstActivityAt {
+            record.firstActivityAt = min(first, date)
+        } else {
+            record.firstActivityAt = date
+        }
+        if let last = record.lastActivityAt {
+            record.lastActivityAt = max(last, date)
+        } else {
+            record.lastActivityAt = date
+        }
     }
 }

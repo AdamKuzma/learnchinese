@@ -87,6 +87,7 @@ enum SharedStore {
         static let hskRangeMax = "hskRangeMax"
         static let hskLevel = "hskLevel"
         static let missionDifficulty = "missionDifficulty"
+        static let missionVocabSource = "missionVocabSource"
         static let missionThemes = "missionThemes"
         static let energyDayStart = "energyDayStart"
         static let activityEvents = "activityEvents"
@@ -219,6 +220,20 @@ enum SharedStore {
         }
         set {
             defaults?.set(newValue.rawValue, forKey: Key.missionDifficulty)
+        }
+    }
+
+    static var missionVocabSource: MissionVocabSource {
+        get {
+            guard let raw = defaults?.string(forKey: Key.missionVocabSource),
+                  let source = MissionVocabSource(rawValue: raw)
+            else {
+                return .discoverHSK
+            }
+            return source
+        }
+        set {
+            defaults?.set(newValue.rawValue, forKey: Key.missionVocabSource)
         }
     }
 
