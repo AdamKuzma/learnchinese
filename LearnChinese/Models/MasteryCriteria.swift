@@ -22,6 +22,7 @@ enum LearningStatus: String, Equatable, Sendable, CaseIterable {
 enum MasteryCriteria {
     static let requiredLessonConfirmations = 10
     static let requiredDailyMissionCompletions = 2
+    static let displayedStars = 3
 
     static func status(
         hasFlashcard: Bool,
@@ -34,5 +35,25 @@ enum MasteryCriteria {
             return .mastered
         }
         return .learning
+    }
+
+    /// 0 with no flashcard, 1 once added, 2 at halfway progress, 3 only when mastered.
+    static func stars(
+        hasFlashcard: Bool,
+        lessonConfirmations: Int,
+        dailyMissionCompletions: Int
+    ) -> Int {
+        guard hasFlashcard else { return 0 }
+        if status(
+            hasFlashcard: true,
+            lessonConfirmations: lessonConfirmations,
+            dailyMissionCompletions: dailyMissionCompletions
+        ) == .mastered {
+            return displayedStars
+        }
+        let halfwayQuiz = lessonConfirmations >= requiredLessonConfirmations / 2
+        let startedMissions = dailyMissionCompletions >= 1
+        if halfwayQuiz || startedMissions { return 2 }
+        return 1
     }
 }

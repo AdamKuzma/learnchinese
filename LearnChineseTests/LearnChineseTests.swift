@@ -72,6 +72,44 @@ struct LearningStatusTests {
             ) == .mastered
         )
     }
+
+    @Test func vocabularyStarsTrackProgressTowardMastery() {
+        #expect(
+            MasteryCriteria.stars(
+                hasFlashcard: false,
+                lessonConfirmations: 10,
+                dailyMissionCompletions: 2
+            ) == 0
+        )
+        #expect(
+            MasteryCriteria.stars(
+                hasFlashcard: true,
+                lessonConfirmations: 0,
+                dailyMissionCompletions: 0
+            ) == 1
+        )
+        #expect(
+            MasteryCriteria.stars(
+                hasFlashcard: true,
+                lessonConfirmations: 5,
+                dailyMissionCompletions: 0
+            ) == 2
+        )
+        #expect(
+            MasteryCriteria.stars(
+                hasFlashcard: true,
+                lessonConfirmations: 10,
+                dailyMissionCompletions: 0
+            ) == 2
+        )
+        #expect(
+            MasteryCriteria.stars(
+                hasFlashcard: true,
+                lessonConfirmations: 10,
+                dailyMissionCompletions: 2
+            ) == 3
+        )
+    }
 }
 
 struct CatalogFixture {
