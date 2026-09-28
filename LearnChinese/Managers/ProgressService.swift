@@ -44,6 +44,7 @@ enum ProgressService {
         let record = progress(for: hanzi, in: context)
         record.lessonConfirmations += 1
         recordSuccessfulActivity(on: record, kind: .recall, at: date, calendar: calendar)
+        recordActivity(on: date, in: context, calendar: calendar)
         try? context.save()
         return record
     }
@@ -69,6 +70,7 @@ enum ProgressService {
         let record = progress(for: hanzi, in: context)
         record.dailyMissionCompletions += 1
         recordSuccessfulActivity(on: record, kind: .mission, at: date, calendar: calendar)
+        recordActivity(on: date, in: context, calendar: calendar)
         try? context.save()
         return record
     }
@@ -79,6 +81,20 @@ enum ProgressService {
         record.lastShownAt = date
         try? context.save()
         return record
+    }
+
+    static func recordActivity(
+        on date: Date = .now,
+        in context: ModelContext,
+        calendar: Calendar = .current
+    ) {
+        let start = calendar.startOfDay(for: date)
+        let existing = (try? context.fetch(FetchDescriptor<DailyActivity>())) ?? []
+        if let match = existing.first(where: { calendar.isDate($0.dayStart, inSameDayAs: start) }) {
+            match.count += 1
+        } else {
+            context.insert(DailyActivity(dayStart: start, count: 1))
+        }
     }
 
     static func snapshot(

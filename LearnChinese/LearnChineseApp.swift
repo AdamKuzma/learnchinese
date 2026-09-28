@@ -37,6 +37,6 @@ struct LearnChineseApp: App {
                     }
                 }
         }
-        .modelContainer(for: [Flashcard.self, ItemProgress.self])
+        .modelContainer(for: [Flashcard.self, ItemProgress.self, DailyActivity.self])
     }
 }
