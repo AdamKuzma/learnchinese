@@ -27,7 +27,8 @@ struct HSKProgressView: View {
                             title: "Vocabulary",
                             added: level.vocabAdded,
                             mastered: level.vocabMastered,
-                            total: level.vocabTotal
+                            total: level.vocabTotal,
+                            showsStars: true
                         )
                         labeledBar(
                             title: "Grammar",
@@ -64,10 +65,22 @@ struct HSKProgressView: View {
         return "\(custom.mastered) mastered · \(custom.learning) learning"
     }
 
-    private func labeledBar(title: String, added: Int, mastered: Int, total: Int) -> some View {
+    private func labeledBar(
+        title: String,
+        added: Int,
+        mastered: Int,
+        total: Int,
+        showsStars: Bool = false
+    ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(title)
+                if showsStars {
+                    Image(systemName: "star.fill")
+                        .font(.caption2)
+                    Text("\(mastered)")
+                        .monospacedDigit()
+                }
                 Spacer()
                 Text("\(added)/\(total)")
                     .monospacedDigit()
@@ -79,6 +92,7 @@ struct HSKProgressView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -156,9 +170,19 @@ private struct TrackedItemRow: View {
                 Text(item.title)
                     .font(.headline)
                 Spacer()
-                Text(item.status.title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(item.status == .mastered ? .primary : .secondary)
+                if item.kind == .grammar {
+                    Text(item.status.title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(item.status == .mastered ? .primary : .secondary)
+                } else {
+                    MasteryStars(
+                        filled: MasteryCriteria.stars(
+                            hasFlashcard: true,
+                            lessonConfirmations: item.lessonConfirmations,
+                            dailyMissionCompletions: item.dailyMissionCompletions
+                        )
+                    )
+                }
             }
             if !item.subtitle.isEmpty {
                 Text(item.subtitle)
