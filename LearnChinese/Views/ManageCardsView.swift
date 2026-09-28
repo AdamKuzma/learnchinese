@@ -38,9 +38,25 @@ struct ManageCardsView: View {
                             .foregroundStyle(.secondary)
                         Text(card.english)
                             .font(.subheadline)
-                        Text(ProgressService.status(for: card.hanzi, cards: cards, progress: progressRecords).title)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        let catalog = HSKCatalog.bundled
+                        let grammarOnly = catalog.vocab(for: card.hanzi) == nil
+                            && !catalog.grammarPoints(for: card.hanzi).isEmpty
+                        if !grammarOnly {
+                            let record = progressRecords.first {
+                                HanziNormalizer.lookupKeys(for: card.hanzi).contains($0.normalizedHanzi)
+                            }
+                            MasteryStars(
+                                filled: MasteryCriteria.stars(
+                                    hasFlashcard: true,
+                                    lessonConfirmations: record?.lessonConfirmations ?? 0,
+                                    dailyMissionCompletions: record?.dailyMissionCompletions ?? 0
+                                )
+                            )
+                        } else {
+                            Text(ProgressService.status(for: card.hanzi, cards: cards, progress: progressRecords).title)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
                 .onDelete(perform: delete)
