@@ -27,8 +27,7 @@ struct HSKProgressView: View {
                             title: "Vocabulary",
                             added: level.vocabAdded,
                             mastered: level.vocabMastered,
-                            total: level.vocabTotal,
-                            showsStars: true
+                            total: level.vocabTotal
                         )
                         labeledBar(
                             title: "Grammar",
@@ -65,22 +64,10 @@ struct HSKProgressView: View {
         return "\(custom.mastered) mastered · \(custom.learning) learning"
     }
 
-    private func labeledBar(
-        title: String,
-        added: Int,
-        mastered: Int,
-        total: Int,
-        showsStars: Bool = false
-    ) -> some View {
+    private func labeledBar(title: String, added: Int, mastered: Int, total: Int) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(title)
-                if showsStars {
-                    Image(systemName: "star.fill")
-                        .font(.caption2)
-                    Text("\(mastered)")
-                        .monospacedDigit()
-                }
                 Spacer()
                 Text("\(added)/\(total)")
                     .monospacedDigit()
@@ -92,7 +79,6 @@ struct HSKProgressView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        .accessibilityElement(children: .combine)
     }
 }
 
@@ -170,19 +156,9 @@ private struct TrackedItemRow: View {
                 Text(item.title)
                     .font(.headline)
                 Spacer()
-                if item.kind == .grammar {
-                    Text(item.status.title)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(item.status == .mastered ? .primary : .secondary)
-                } else {
-                    MasteryStars(
-                        filled: MasteryCriteria.stars(
-                            hasFlashcard: true,
-                            lessonConfirmations: item.lessonConfirmations,
-                            dailyMissionCompletions: item.dailyMissionCompletions
-                        )
-                    )
-                }
+                Text(item.status.title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(item.status == .mastered ? .primary : .secondary)
             }
             if !item.subtitle.isEmpty {
                 Text(item.subtitle)

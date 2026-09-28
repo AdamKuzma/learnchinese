@@ -124,9 +124,6 @@ struct HomeView: View {
     private var progressSection: some View {
         let snapshot = ProgressService.snapshot(cards: cards, progress: progressRecords)
         let summary = snapshot.summary(in: blocker.hskRange)
-        let vocabMastered = snapshot.levels
-            .filter { blocker.hskRange.contains($0.level) }
-            .reduce(0) { $0 + $1.vocabMastered }
         Section("HSK progress") {
             NavigationLink {
                 HSKProgressView()
@@ -134,12 +131,7 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(blocker.hskRange.title)
                         .font(.headline)
-                    labeledBar(
-                        title: "Vocabulary",
-                        added: summary.vocabAdded,
-                        total: summary.vocabTotal,
-                        mastered: vocabMastered
-                    )
+                    labeledBar(title: "Vocabulary", added: summary.vocabAdded, total: summary.vocabTotal)
                     labeledBar(title: "Grammar", added: summary.grammarAdded, total: summary.grammarTotal)
                     if snapshot.custom.added > 0 {
                         Text("Custom \(snapshot.custom.added)")
@@ -152,16 +144,10 @@ struct HomeView: View {
         }
     }
 
-    private func labeledBar(title: String, added: Int, total: Int, mastered: Int? = nil) -> some View {
+    private func labeledBar(title: String, added: Int, total: Int) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(title)
-                if let mastered {
-                    Image(systemName: "star.fill")
-                        .font(.caption2)
-                    Text("\(mastered)")
-                        .monospacedDigit()
-                }
                 Spacer()
                 Text("\(added)/\(total)")
                     .monospacedDigit()
